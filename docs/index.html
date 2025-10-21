@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Painel de Cobranças - LW Mutuomercantil</title>
+  <style>
+    body { font-family: Arial, sans-serif; background: #f5f5f5; padding: 20px; }
+    h1 { text-align: center; color: #333; }
+    table { width: 100%; border-collapse: collapse; margin-top: 20px; background: white; }
+    th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
+    th { background: #222; color: white; }
+    tr:hover { background: #eee; }
+    a { color: #007bff; text-decoration: none; }
+  </style>
+</head>
+<body>
+  <h1>💰 Painel de Cobranças Diárias - LW Mutuomercantil</h1>
+  <table id="tabela">
+    <thead>
+      <tr>
+        <th>Nome</th>
+        <th>Associado</th>
+        <th>Data Empréstimo</th>
+        <th>Valor Base (R$)</th>
+        <th>Juros Diário (%)</th>
+        <th>Dias</th>
+        <th>Valor Atualizado (R$)</th>
+        <th>WhatsApp</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <script>
+    async function carregar() {
+      const resp = await fetch("../data/cobrancas.json");
+      const dados = await resp.json();
+      const corpo = document.querySelector("#tabela tbody");
+      corpo.innerHTML = "";
+      dados.forEach(c => {
+        corpo.innerHTML += `
+          <tr>
+            <td>${c.nome}</td>
+            <td>${c.associado}</td>
+            <td>${c.dias} dias</td>
+            <td>${c.valor_base.toFixed(2)}</td>
+            <td>${c.juros_diario.toFixed(2)}</td>
+            <td>${c.dias}</td>
+            <td><b>${c.valor_atualizado.toFixed(2)}</b></td>
+            <td><a href="${c.whatsapp}" target="_blank">💬 Enviar</a></td>
+          </tr>`;
+      });
+    }
+    carregar();
+  </script>
+</body>
+</html>

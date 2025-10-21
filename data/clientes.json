@@ -1,0 +1,12 @@
+[
+  {
+    "nome": "João Silva",
+    "telefone": "5599999999999",
+    "valor_base": 100.00,
+    "juros_diario": 0.5,
+    "data_emprestimo": "2025-10-01",
+    "objeto_empenho": "Empréstimo pessoal",
+    "documento": "Procuração nº 01",
+    "associado": "LW Mutuomercantil"
+  }
+]
