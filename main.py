@@ -55,7 +55,9 @@ async def cadastrar(request: Request):
 
         novo_cliente = {
             "nome": dados.get("nome"),
+	    "telefone": dados.get("telefone"),
             "valor_base": dados.get("valor_base"),
+	    "juros": dados.get("juros"),
             "juros_diario": dados.get("juros_diario"),
             "data_emprestimo": dados.get("data_emprestimo"),
             "objeto_empenho": dados.get("objeto_empenho"),
