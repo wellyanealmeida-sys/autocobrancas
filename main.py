@@ -1,36 +1,89 @@
-import json, os
-from datetime import datetime
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from datetime import datetime, timedelta
+import json
+import os
 
-DATA_DIR = "data"
-CLIENTES_FILE = os.path.join(DATA_DIR, "clientes.json")
-COBRANCAS_FILE = os.path.join(DATA_DIR, "cobrancas.json")
+app = FastAPI()
 
-def calcular_juros(valor_base, juros_diario, dias_atraso):
-    return round(valor_base * (1 + (juros_diario / 100) * dias_atraso), 2)
+# 🔓 Permite que o front-end do GitHub Pages se comunique com a API
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # ou ["https://wellyanealmeida-sys.github.io"]
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-def atualizar_cobrancas():
-    hoje = datetime.now().strftime("%Y-%m-%d")
-    with open(CLIENTES_FILE, "r", encoding="utf-8") as f:
+# 📁 Caminho onde os dados serão salvos
+DATA_FILE = "data/clientes.json"
+
+# 🔧 Garante que o arquivo exista
+os.makedirs("data", exist_ok=True)
+if not os.path.exists(DATA_FILE):
+    with open(DATA_FILE, "w", encoding="utf-8") as f:
+        json.dump([], f, indent=4, ensure_ascii=False)
+
+
+# 🏠 Rota inicial
+@app.get("/")
+def home():
+    return {"mensagem": "🚀 API da LW Mútuo Mercantil está rodando!"}
+
+
+# 🧮 Função para atualizar juros diários
+def atualizar_valor(cliente):
+    data_emprestimo = datetime.strptime(cliente["data_emprestimo"], "%Y-%m-%d")
+    dias = (datetime.now() - data_emprestimo).days
+    juros_dia = float(cliente["juros_diario"])
+    valor_base = float(cliente["valor_base"])
+    valor_total = valor_base * ((1 + juros_dia / 100) ** dias)
+    cliente["valor_total"] = round(valor_total, 2)
+    cliente["dias_corridos"] = dias
+    return cliente
+
+
+# 🧾 Rota para cadastrar novo cliente
+@app.post("/cadastrar")
+async def cadastrar(request: Request):
+    try:
+        dados = await request.json()
+
+        with open(DATA_FILE, "r", encoding="utf-8") as f:
+            clientes = json.load(f)
+
+        novo_cliente = {
+            "nome": dados.get("nome"),
+            "valor_base": dados.get("valor_base"),
+            "juros_diario": dados.get("juros_diario"),
+            "data_emprestimo": dados.get("data_emprestimo"),
+            "objeto_empenho": dados.get("objeto_empenho"),
+            "documento": dados.get("documento"),
+            "associados": dados.get("associados"),
+        }
+
+        novo_cliente = atualizar_valor(novo_cliente)
+        clientes.append(novo_cliente)
+
+        with open(DATA_FILE, "w", encoding="utf-8") as f:
+            json.dump(clientes, f, indent=4, ensure_ascii=False)
+
+        return {"mensagem": "Cliente cadastrado com sucesso!", "cliente": novo_cliente}
+
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"erro": str(e)})
+
+
+# 📊 Rota para listar clientes com valores atualizados
+@app.get("/clientes")
+def listar_clientes():
+    with open(DATA_FILE, "r", encoding="utf-8") as f:
         clientes = json.load(f)
-    cobrancas = []
-    for cliente in clientes:
-        data_emprestimo = datetime.strptime(cliente["data_emprestimo"], "%Y-%m-%d")
-        dias = (datetime.now() - data_emprestimo).days
-        valor_atualizado = calcular_juros(cliente["valor_base"], cliente["juros_diario"], dias)
-        cobrancas.append({
-            "nome": cliente["nome"],
-            "associado": cliente.get("associado", ""),
-            "documento": cliente.get("documento", ""),
-            "objeto_empenho": cliente.get("objeto_empenho", ""),
-            "valor_base": cliente["valor_base"],
-            "juros_diario": cliente["juros_diario"],
-            "dias": dias,
-            "valor_atualizado": valor_atualizado,
-            "whatsapp": f"https://wa.me/{cliente['telefone']}?text=Olá%20{cliente['nome']}!%20Sua%20cobrança%20atualizada%20é%20de%20R${valor_atualizado}"
-        })
-    with open(COBRANCAS_FILE, "w", encoding="utf-8") as f:
-        json.dump(cobrancas, f, ensure_ascii=False, indent=2)
-    print("Cobranças atualizadas com sucesso:", hoje)
 
-if __name__ == "__main__":
-    atualizar_cobrancas()
+    clientes_atualizados = [atualizar_valor(c) for c in clientes]
+
+    with open(DATA_FILE, "w", encoding="utf-8") as f:
+        json.dump(clientes_atualizados, f, indent=4, ensure_ascii=False)
+
+    return clientes_atualizados
