@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>LW Mútuo Mercantil — AutoCobranças</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="container">
+    <h1>LW Mútuo Mercantil — AutoCobranças</h1>
+    <div class="form">
+      <label>Nome</label><input id="nome" type="text">
+      <label>Valor Base (R$)</label><input id="valor_base" type="number" step="0.01">
+      <label>Data do Crédito</label><input id="data_credito" type="date">
+      <label>Juros Diário (apenas número, ex: 0.5)</label><input id="juros_diario" type="number" step="0.0001">
+      <label>Juros Mês (%)</label><input id="juros_mensal" type="number" step="0.01">
+      <label>Objeto de Empenho</label><input id="objeto_empenho" type="text">
+      <label>Documento / Procuração</label><input id="documento" type="text">
+      <div id="associadosArea">
+        <label>Associados</label>
+        <div id="associadosList"></div>
+        <button id="addAssoc">+ adicionar associado</button>
+      </div>
+      <label>Telefone (DDD+numero, ex:5511999999999)</label><input id="telefone" type="text">
+      <button id="btnSubmit">Cadastrar / Atualizar</button>
+    </div>
+
+    <h2>Clientes</h2>
+    <div id="clientes"></div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
