@@ -1,26 +1,90 @@
-*{box-sizing:border-box}body{margin:0;font-family:Inter,Segoe UI,Arial,sans-serif;background:#0f172a;color:#e2e8f0}
-.wrap{max-width:1100px;margin:0 auto;padding:24px}
-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
-h1{font-size:20px;margin:0}
-.card{background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:16px;margin-bottom:16px}
-.form h2{margin-top:0}
-.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
-label{display:flex;flex-direction:column;font-size:13px;color:#94a3b8}
-input{margin-top:6px;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:transparent;color:#e2e8f0}
-.primary{background:linear-gradient(90deg,#06b6d4,#22d3ee);color:#062a36;border:none;padding:10px 14px;border-radius:10px;font-weight:700;cursor:pointer}
-.ghost{background:transparent;border:1px solid rgba(255,255,255,0.15);color:#e2e8f0;padding:8px 12px;border-radius:10px;cursor:pointer}
-.actions{display:flex;gap:8px}
-.formActions{display:flex;gap:8px;margin-top:10px}
-.assocBox{margin-top:10px}
-.assocHeader{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
-.assocItem{display:flex;gap:8px;margin:6px 0}
-.assocItem input{flex:1}
-.list{display:flex;flex-direction:column;gap:10px}
-.row{display:flex;justify-content:space-between;align-items:center;padding:10px;border:1px solid rgba(255,255,255,0.06);border-radius:10px;background:rgba(255,255,255,0.02)}
-.info{display:flex;flex-direction:column;gap:4px}
-.title{font-weight:700}
-.meta{font-size:12px;color:#94a3b8}
-.btns{display:flex;gap:8px}
-.btn-whatsapp{background:#22c55e;border:none;color:#062a36;font-weight:700;padding:8px 12px;border-radius:10px;cursor:pointer}
-small.muted{display:block;margin-top:8px;color:#94a3b8}
-@media(max-width:860px){.grid{grid-template-columns:1fr}}
+body {
+  font-family: "Segoe UI", Arial, sans-serif;
+  background-color: #121212;
+  color: #f5f5f5;
+  margin: 0;
+  padding: 0;
+}
+
+header {
+  background-color: #1e1e1e;
+  text-align: center;
+  padding: 20px;
+  color: #d4af37;
+  font-size: 1.4rem;
+  font-weight: bold;
+  letter-spacing: 1px;
+  border-bottom: 2px solid #d4af37;
+}
+
+main {
+  max-width: 900px;
+  margin: 30px auto;
+  padding: 20px;
+}
+
+form {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 15px;
+}
+
+form input,
+form button {
+  padding: 10px;
+  border-radius: 8px;
+  border: none;
+}
+
+form button {
+  grid-column: span 2;
+  background-color: #d4af37;
+  color: #121212;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+#clientes-list {
+  margin-top: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.cliente-card {
+  background-color: #1e1e1e;
+  border: 1px solid #333;
+  border-radius: 10px;
+  padding: 15px;
+}
+
+.cliente-card h3 {
+  margin-top: 0;
+  color: #d4af37;
+}
+
+.buttons {
+  margin-top: 10px;
+}
+
+button.edit {
+  background-color: #007bff;
+  color: white;
+  margin-right: 5px;
+}
+
+button.delete {
+  background-color: #dc3545;
+  color: white;
+  margin-right: 5px;
+}
+
+button.whatsapp {
+  background-color: #25d366;
+  color: white;
+}
+
+button:hover {
+  opacity: 0.9;
+}
