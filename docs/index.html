@@ -1,54 +1,40 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="pt-BR">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>LW Mútuo Mercantil — AutoCobranças</title>
-  <link rel="stylesheet" href="style.css" />
-</head>
-<body>
-  <div class="wrap">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>LW Mútuo Mercantil — Sistema de Cobranças</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
     <header>
-      <h1>LW Mútuo Mercantil — AutoCobranças</h1>
-      <div class="actions">
-        <button id="btnReload" class="ghost">Recarregar</button>
-      </div>
+      <h1>LW Mútuo Mercantil — Sistema de Cobranças</h1>
     </header>
 
-    <section class="card form">
-      <h2>Cadastrar / Editar Cliente</h2>
-      <div class="grid">
-        <label>Nome<input id="nome" type="text" placeholder="Nome do cliente" /></label>
-        <label>Valor Base (R$)<input id="valor_base" type="number" step="0.01" placeholder="100.00" /></label>
-        <label>Data do Crédito<input id="data_credito" type="date" /></label>
-        <label>Juros Diário (ex: 0.5)<input id="juros_diario" type="number" step="0.0001" placeholder="0.5" /></label>
-        <label>Juros Mês (%)<input id="juros_mensal" type="number" step="0.01" placeholder="1.5" /></label>
-        <label>Objeto de Empenho<input id="objeto_empenho" type="text" placeholder="Ex: Bem X" /></label>
-        <label>Documento / Procuração<input id="documento" type="text" placeholder="Procuração nº ..." /></label>
-        <label>Telefone do Cliente (com DDI, ex: 5561999999999)<input id="telefone" type="text" placeholder="5561..." /></label>
-      </div>
+    <main>
+      <section id="form-section">
+        <h2>Cadastrar / Editar Cliente</h2>
+        <form id="cliente-form">
+          <input id="nome" placeholder="Nome do Cliente" required />
+          <input id="valor_credito" type="number" step="0.01" placeholder="Valor de Crédito (R$)" required />
+          <input id="data_credito" type="date" required />
+          <input id="data_vencimento" type="date" required />
+          <input id="juros_mensal" type="number" step="0.01" placeholder="Juros Mensal (%)" required />
+          <input id="juros_diario" type="number" step="0.01" placeholder="Juros Diário (%)" required />
+          <input id="objeto_empenho" placeholder="Objeto de Empenho" />
+          <input id="documento" placeholder="Documento / Procuração" />
+          <input id="associados" placeholder="Associados" />
+          <input id="telefone" placeholder="Telefone (5561XXXXXXXX)" required />
+          <button type="submit">💾 Salvar Cliente</button>
+        </form>
+      </section>
 
-      <div class="assocBox">
-        <div class="assocHeader">
-          <span>Associados</span>
-          <button id="addAssoc" class="ghost">+ Adicionar</button>
-        </div>
-        <div id="associadosList"></div>
-      </div>
+      <section id="clientes-section">
+        <h2>Clientes Cadastrados</h2>
+        <div id="clientes-list"></div>
+      </section>
+    </main>
 
-      <div class="formActions">
-        <button id="btnSubmit" class="primary">Salvar</button>
-        <button id="btnCancelEdit" class="ghost" style="display:none">Cancelar edição</button>
-      </div>
-      <small class="muted">O backend recalcula automaticamente os valores ao listar clientes.</small>
-    </section>
-
-    <section class="card">
-      <h2>Clientes</h2>
-      <div id="clientesList" class="list"></div>
-    </section>
-  </div>
-
-  <script src="script.js"></script>
-</body>
+    <script src="script.js"></script>
+  </body>
 </html>
