@@ -6,34 +6,46 @@
     <title>LW Mútuo Mercantil — Sistema de Cobranças</title>
     <link rel="stylesheet" href="style.css" />
   </head>
+
   <body>
     <header>
-      <h1>LW Mútuo Mercantil — Sistema de Cobranças</h1>
+      <h1>💼 LW Mútuo Mercantil</h1>
+      <p class="subtitle">Sistema de Cobranças Automáticas</p>
     </header>
 
     <main>
-      <section id="form-section">
+      <section id="form-section" class="card">
         <h2>Cadastrar / Editar Cliente</h2>
+
         <form id="cliente-form">
-          <input id="nome" placeholder="Nome do Cliente" required />
-          <input id="valor_credito" type="number" step="0.01" placeholder="Valor de Crédito (R$)" required />
-          <input id="data_credito" type="date" required />
-          <input id="data_vencimento" type="date" required />
-          <input id="juros_mensal" type="number" step="0.01" placeholder="Juros Mensal (%)" required />
-          <input id="juros_diario" type="number" step="0.01" placeholder="Juros Diário (%)" required />
-          <input id="objeto_empenho" placeholder="Objeto de Empenho" />
-          <input id="documento" placeholder="Documento / Procuração" />
-          <input id="associados" placeholder="Associados" />
-          <input id="telefone" placeholder="Telefone (5561XXXXXXXX)" required />
-          <button type="submit">💾 Salvar Cliente</button>
+          <div class="form-grid">
+            <input id="nome" placeholder="Nome do Cliente" required />
+            <input id="valor_credito" type="number" step="0.01" placeholder="Valor de Crédito (R$)" required />
+            <input id="data_credito" type="date" required />
+            <input id="data_vencimento" type="date" required />
+            <input id="juros_mensal" type="number" step="0.01" placeholder="Juros Mensal (%)" required />
+            <input id="juros_diario" type="number" step="0.01" placeholder="Juros Diário (R$ / dia útil)" required />
+            <input id="objeto_empenho" placeholder="Objeto de Empenho" />
+            <input id="documento" placeholder="Documento / Procuração" />
+            <input id="associados" placeholder="Associados" />
+            <input id="telefone" placeholder="Telefone (5561XXXXXXXX)" required />
+          </div>
+
+          <div class="btn-center">
+            <button type="submit" class="btn-save">💾 Salvar Cliente</button>
+          </div>
         </form>
       </section>
 
-      <section id="clientes-section">
+      <section id="clientes-section" class="card">
         <h2>Clientes Cadastrados</h2>
-        <div id="clientes-list"></div>
+        <div id="clientes-list" class="clientes-container"></div>
       </section>
     </main>
+
+    <footer>
+      <p>© 2025 LW Mútuo Mercantil — Sistema de Cobranças Automáticas</p>
+    </footer>
 
     <script src="script.js"></script>
   </body>
