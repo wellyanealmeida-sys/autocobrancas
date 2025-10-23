@@ -1,50 +1,50 @@
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from datetime import datetime, timedelta
+from datetime import datetime
+from typing import List
 import json
 import os
 
-app = FastAPI()
+app = FastAPI(title="LW Mútuo Mercantil - AutoCobranças")
 
-# 🔓 Permite que o front-end do GitHub Pages se comunique com a API
+# 🔓 Permite conexão do front-end (GitHub Pages)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # ou ["https://wellyanealmeida-sys.github.io"]
+    allow_origins=["*"],  # depois pode restringir para o seu domínio
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# 📁 Caminho onde os dados serão salvos
+# 📁 Caminho do arquivo de dados
 DATA_FILE = "data/clientes.json"
-
-# 🔧 Garante que o arquivo exista
 os.makedirs("data", exist_ok=True)
 if not os.path.exists(DATA_FILE):
     with open(DATA_FILE, "w", encoding="utf-8") as f:
         json.dump([], f, indent=4, ensure_ascii=False)
 
-
-# 🏠 Rota inicial
-@app.get("/")
-def home():
-    return {"mensagem": "🚀 API da LW Mútuo Mercantil está rodando!"}
-
-
-# 🧮 Função para atualizar juros diários
+# 🧮 Função para atualizar valor com juros diário
 def atualizar_valor(cliente):
-    data_emprestimo = datetime.strptime(cliente["data_emprestimo"], "%Y-%m-%d")
-    dias = (datetime.now() - data_emprestimo).days
+    data_credito = datetime.strptime(cliente["data_credito"], "%Y-%m-%d")
+    dias = (datetime.now() - data_credito).days
     juros_dia = float(cliente["juros_diario"])
     valor_base = float(cliente["valor_base"])
+
+    # cálculo com juros compostos diários
     valor_total = valor_base * ((1 + juros_dia / 100) ** dias)
     cliente["valor_total"] = round(valor_total, 2)
     cliente["dias_corridos"] = dias
     return cliente
 
 
-# 🧾 Rota para cadastrar novo cliente
+# 🏠 Rota principal
+@app.get("/")
+def home():
+    return {"mensagem": "🚀 API da LW Mútuo Mercantil está ativa e rodando!"}
+
+
+# 🧾 Cadastrar cliente
 @app.post("/cadastrar")
 async def cadastrar(request: Request):
     try:
@@ -55,14 +55,13 @@ async def cadastrar(request: Request):
 
         novo_cliente = {
             "nome": dados.get("nome"),
-	    "telefone": dados.get("telefone"),
             "valor_base": dados.get("valor_base"),
-	    "juros": dados.get("juros"),
             "juros_diario": dados.get("juros_diario"),
-            "data_emprestimo": dados.get("data_emprestimo"),
+            "juros_mensal": dados.get("juros_mensal"),
+            "data_credito": dados.get("data_credito"),
             "objeto_empenho": dados.get("objeto_empenho"),
             "documento": dados.get("documento"),
-            "associados": dados.get("associados"),
+            "associados": dados.get("associados", []),
         }
 
         novo_cliente = atualizar_valor(novo_cliente)
@@ -77,7 +76,7 @@ async def cadastrar(request: Request):
         return JSONResponse(status_code=500, content={"erro": str(e)})
 
 
-# 📊 Rota para listar clientes com valores atualizados
+# 📊 Listar clientes
 @app.get("/clientes")
 def listar_clientes():
     with open(DATA_FILE, "r", encoding="utf-8") as f:
