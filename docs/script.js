@@ -1,106 +1,141 @@
+// >>> CONFIG <<<
 const API_BASE = window.location.hostname.includes('localhost') ? 'http://127.0.0.1:8000' : 'https://autocobrancas.onrender.com';
-async function carregar(){
-  const r = await fetch(API_BASE + '/clientes');
-  const clientes = await r.json();
-  const el = document.getElementById('clientes');
-  el.innerHTML = '';
-  clientes.forEach((c, idx) => {
-    const div = document.createElement('div');
-    div.className = 'client';
-    div.innerHTML = `<div class="left"><strong>${c.nome}</strong><div>Valor atualizado: R$ ${Number(c.valor_total).toFixed(2)}</div><div>Dias: ${c.dias_corridos}</div><div>Associados: ${(c.associados||[]).join(', ')}</div></div>
-      <div class="right">
-        <button onclick="abrirWhats(${idx})">WhatsApp</button>
-        <button onclick="editar(${idx})">Editar</button>
-        <button onclick="deletar(${idx})">Remover</button>
-      </div>`;
-    el.appendChild(div);
-  });
+const PIX_INFO = 'chavepix@lwmutuomercantil.com.br';
+
+const $ = s => document.querySelector(s);
+const elList = $('#clientesList');
+
+let editIndex = null;
+
+function addAssocField(value=''){
+  const div = document.createElement('div');
+  div.className='assocItem';
+  div.innerHTML = `<input placeholder="Nome do associado" value="${(value||'').replace(/"/g,'&quot;')}" />
+                   <button class="ghost" type="button">Remover</button>`;
+  div.querySelector('button').onclick = ()=> div.remove();
+  $('#associadosList').appendChild(div);
 }
 
-document.getElementById('addAssoc').addEventListener('click', (e)=>{ e.preventDefault(); addAssocInput(); });
+$('#addAssoc').onclick = (e)=>{ e.preventDefault(); addAssocField(); };
 
-function addAssocInput(value=''){
-  const list = document.getElementById('associadosList');
-  const wrapper = document.createElement('div'); wrapper.className='assoc';
-  wrapper.innerHTML = `<input value="${value}" placeholder="Nome do associado"><button onclick="this.parentElement.remove()">Remover</button>`;
-  list.appendChild(wrapper);
-}
+$('#btnCancelEdit').onclick = ()=>{
+  editIndex = null;
+  $('#btnSubmit').textContent = 'Salvar';
+  $('#btnCancelEdit').style.display='none';
+};
 
-document.getElementById('btnSubmit').addEventListener('click', async ()=>{
-  const associados = Array.from(document.querySelectorAll('#associadosList input')).map(i=>i.value).filter(Boolean);
+$('#btnReload').onclick = ()=> carregarClientes();
+
+$('#btnSubmit').onclick = async ()=>{
+  const associados = Array.from(document.querySelectorAll('#associadosList input')).map(i=>i.value.trim()).filter(Boolean);
   const payload = {
-    nome: document.getElementById('nome').value,
-    valor_base: document.getElementById('valor_base').value,
-    data_credito: document.getElementById('data_credito').value,
-    juros_diario: document.getElementById('juros_diario').value,
-    juros_mensal: document.getElementById('juros_mensal').value,
-    objeto_empenho: document.getElementById('objeto_empenho').value,
-    documento: document.getElementById('documento').value,
+    nome: $('#nome').value.trim(),
+    valor_base: parseFloat($('#valor_base').value||0),
+    data_credito: $('#data_credito').value,
+    juros_diario: parseFloat($('#juros_diario').value||0),
+    juros_mensal: parseFloat($('#juros_mensal').value||0),
+    objeto_empenho: $('#objeto_empenho').value.trim(),
+    documento: $('#documento').value.trim(),
     associados,
-    telefone: document.getElementById('telefone').value
+    telefone: $('#telefone').value.trim()
   };
-  const r = await fetch(API_BASE + '/cadastrar', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
-  if(r.ok){ alert('Cadastrado'); carregar(); }
-  else { alert('Erro ao cadastrar'); }
-});
+  if(!payload.nome || !payload.data_credito){ alert('Preencha Nome e Data do Crédito.'); return; }
 
-async function abrirWhats(idx){
-  const r = await fetch(API_BASE + '/clientes');
-  const clientes = await r.json();
-  const c = clientes[idx];
-  const phone = (c.telefone||'').replace(/\D/g,'');
-  if(!phone){ alert('Telefone não cadastrado'); return; }
-  const mensagem = `Olá ${c.nome}, sua cobrança atualizada é R$ ${Number(c.valor_total).toFixed(2)}.`;
-  const send = await fetch(API_BASE + '/enviar_whatsapp/' + idx, {method:'POST'});
-  const resp = await send.json();
-  if(send.ok && resp.ok){
-    alert('Mensagem enviada via API.');
-  } else if(resp.wa_link) {
-    window.open(resp.wa_link, '_blank');
+  if(editIndex===null){
+    const r = await fetch(API_BASE + '/cadastrar', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    if(!r.ok) return alert('Erro ao cadastrar');
   } else {
-    alert('Erro ao enviar mensagem.');
+    const r = await fetch(API_BASE + '/editar/' + editIndex, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    if(!r.ok) return alert('Erro ao atualizar');
+    editIndex=null; $('#btnSubmit').textContent='Salvar'; $('#btnCancelEdit').style.display='none';
+  }
+  limparFormulario();
+  carregarClientes();
+};
+
+function limparFormulario(){
+  ['nome','valor_base','data_credito','juros_diario','juros_mensal','objeto_empenho','documento','telefone'].forEach(id=> $('#'+id).value='');
+  $('#associadosList').innerHTML='';
+  addAssocField();
+}
+
+async function carregarClientes(){
+  try{
+    const r = await fetch(API_BASE + '/clientes');
+    const clientes = await r.json();
+    elList.innerHTML='';
+    clientes.forEach((c, idx)=>{
+      const row = document.createElement('div');
+      row.className='row';
+      const jurosMes = (c.juros_mes != null ? c.juros_mes : (parseFloat(c.juros_diario||0)*30)).toFixed(2);
+      row.innerHTML = `
+        <div class="info">
+          <div class="title">${c.nome||'-'}</div>
+          <div class="meta">Valor atualizado: <b>R$ ${(Number(c.valor_total||0)).toFixed(2)}</b> • Dias: ${c.dias_corridos||0}</div>
+          <div class="meta">Juros mensal: ${jurosMes}% • Juros diário: ${c.juros_diario||0}</div>
+          <div class="meta">Telefone: ${c.telefone||'-'} • Data do crédito: ${c.data_credito||'-'}</div>
+          <div class="meta">Associados: ${(c.associados||[]).join(', ') || '-'}</div>
+        </div>
+        <div class="btns">
+          <button class="btn-whatsapp" type="button">💬 Enviar via WhatsApp</button>
+          <button class="ghost" type="button">✏️ Editar</button>
+          <button class="ghost" type="button">🗑️ Remover</button>
+        </div>`;
+
+      row.querySelector('.btn-whatsapp').onclick = ()=>{
+        const msg =
+`Olá ${c.nome}! 💰
+
+Seu saldo atualizado de hoje é de R$ ${(Number(c.valor_total||0)).toFixed(2)}.
+Data do crédito: ${c.data_credito||'-'}
+Juros mensal: ${jurosMes}%
+Juros diário: ${c.juros_diario||0}
+
+Efetue o pagamento via PIX:
+Chave: ${PIX_INFO}
+
+Atenciosamente,
+LW Mútuo Mercantil`;
+        const phone = (c.telefone||'').replace(/\D/g,'');
+        if(!phone){ alert('Telefone do cliente não cadastrado.'); return; }
+        const url = 'https://wa.me/' + phone + '?text=' + encodeURIComponent(msg);
+        window.open(url, '_blank');
+      };
+
+      row.querySelectorAll('.ghost')[0].onclick = ()=>{
+        editIndex = idx;
+        $('#btnSubmit').textContent = 'Salvar alteração';
+        $('#btnCancelEdit').style.display='inline-block';
+        $('#nome').value = c.nome||'';
+        $('#valor_base').value = c.valor_base||'';
+        $('#data_credito').value = c.data_credito||'';
+        $('#juros_diario').value = c.juros_diario||'';
+        $('#juros_mensal').value = c.juros_mensal||'';
+        $('#objeto_empenho').value = c.objeto_empenho||'';
+        $('#documento').value = c.documento||'';
+        $('#telefone').value = c.telefone||'';
+        const list = $('#associadosList'); list.innerHTML='';
+        (c.associados||[]).forEach(a=> addAssocField(a));
+        if((c.associados||[]).length===0) addAssocField();
+        window.scrollTo({top:0,behavior:'smooth'});
+      };
+
+      row.querySelectorAll('.ghost')[1].onclick = async ()=>{
+        if(!confirm('Remover cliente?')) return;
+        const res = await fetch(API_BASE + '/cliente/' + idx, {method:'DELETE'});
+        if(!res.ok) return alert('Erro ao remover');
+        carregarClientes();
+      };
+
+      elList.appendChild(row);
+    });
+  }catch(err){
+    console.error(err);
+    elList.innerHTML = '<div class="meta">Erro ao carregar clientes. Verifique o backend.</div>';
   }
 }
 
-async function editar(idx){
-  const r = await fetch(API_BASE + '/clientes');
-  const clientes = await r.json();
-  const c = clientes[idx];
-  if(!c) return;
-  document.getElementById('nome').value = c.nome || '';
-  document.getElementById('valor_base').value = c.valor_base || '';
-  document.getElementById('data_credito').value = c.data_credito || '';
-  document.getElementById('juros_diario').value = c.juros_diario || '';
-  document.getElementById('juros_mensal').value = c.juros_mensal || '';
-  document.getElementById('objeto_empenho').value = c.objeto_empenho || '';
-  document.getElementById('documento').value = c.documento || '';
-  document.getElementById('telefone').value = c.telefone || '';
-  document.getElementById('associadosList').innerHTML = '';
-  (c.associados||[]).forEach(a=> addAssocInput(a));
-  document.getElementById('btnSubmit').textContent = 'Salvar alteração';
-  document.getElementById('btnSubmit').onclick = async ()=> {
-    const associados = Array.from(document.querySelectorAll('#associadosList input')).map(i=>i.value).filter(Boolean);
-    const payload = {
-      nome: document.getElementById('nome').value,
-      valor_base: document.getElementById('valor_base').value,
-      data_credito: document.getElementById('data_credito').value,
-      juros_diario: document.getElementById('juros_diario').value,
-      juros_mensal: document.getElementById('juros_mensal').value,
-      objeto_empenho: document.getElementById('objeto_empenho').value,
-      documento: document.getElementById('documento').value,
-      associados,
-      telefone: document.getElementById('telefone').value
-    };
-    const res = await fetch(API_BASE + '/editar/' + idx, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
-    if(res.ok){ alert('Atualizado'); carregar(); document.getElementById('btnSubmit').textContent='Cadastrar / Atualizar'; location.reload(); }
-    else alert('Erro ao atualizar');
-  };
-}
-
-async function deletar(idx){
-  if(!confirm('Remover cliente?')) return;
-  const res = await fetch(API_BASE + '/cliente/' + idx, {method:'DELETE'});
-  if(res.ok){ alert('Removido'); carregar(); } else alert('Erro ao remover');
-}
-
-carregar();
+document.addEventListener('DOMContentLoaded', ()=>{
+  addAssocField();
+  carregarClientes();
+});
