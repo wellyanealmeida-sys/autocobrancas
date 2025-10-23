@@ -1,11 +1,11 @@
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-import os, json
-from modules.clients.routes import router as clients_router
-from modules.whatsapp.send_message import send_whatsapp_message, can_send_whatsapp
+import json, os
+from datetime import datetime
 
 app = FastAPI(title="LW Mútuo Mercantil - AutoCobranças")
 
+# CORS liberado para o frontend (GitHub Pages)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -14,29 +14,90 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(clients_router, prefix="")
+# Caminho do arquivo de clientes
+DATA_FILE = os.path.join("data", "clientes.json")
 
+# Garante que o arquivo existe
+if not os.path.exists(DATA_FILE):
+    os.makedirs("data", exist_ok=True)
+    with open(DATA_FILE, "w", encoding="utf-8") as f:
+        json.dump([], f, ensure_ascii=False, indent=2)
+
+
+# 🧩 Função auxiliar: calcular juros e valor atualizado
+def calcular_valor(cliente):
+    try:
+        data_credito = datetime.strptime(cliente.get("data_credito", ""), "%Y-%m-%d")
+    except Exception:
+        return cliente
+
+    dias = (datetime.now() - data_credito).days
+    if dias < 0:
+        dias = 0
+
+    juros_diario = float(cliente.get("juros_diario", 0))
+    valor_base = float(cliente.get("valor_base", 0))
+    valor_total = valor_base * ((1 + juros_diario / 100) ** dias)
+    juros_mes = round(juros_diario * 30, 2)
+
+    cliente["dias_corridos"] = dias
+    cliente["valor_total"] = round(valor_total, 2)
+    cliente["juros_mes"] = juros_mes
+    return cliente
+
+
+# 🧩 Rota principal
 @app.get("/")
 def home():
-    return {"mensagem": "API LW Mútuo Mercantil rodando"}
+    return {"mensagem": "API LW Mútuo Mercantil ativa."}
 
-@app.post("/enviar_whatsapp/{index}")
-async def enviar_whatsapp(index: int, request: Request):
-    DATA_FILE = os.path.join("data", "clientes.json")
-    if not os.path.exists(DATA_FILE):
-        raise HTTPException(status_code=404, detail="Sem dados")
+
+# 🧩 Listar clientes
+@app.get("/clientes")
+def listar_clientes():
     with open(DATA_FILE, "r", encoding="utf-8") as f:
         clientes = json.load(f)
-    if index < 0 or index >= len(clientes):
-        raise HTTPException(status_code=404, detail="Cliente não encontrado")
-    cliente = clientes[index]
-    phone = cliente.get("telefone")
-    if not phone:
-        raise HTTPException(status_code=400, detail="Telefone não cadastrado")
-    message = f"Olá {cliente.get('nome')}!\nSua cobrança atualizada: R$ {cliente.get('valor_total')}\nDias: {cliente.get('dias_corridos')}\nPagamento via PIX: {os.getenv('PIX_INFO','(PIX não configurado)')}")
-    if can_send_whatsapp():
-        result = send_whatsapp_message(phone, message)
-        return {"ok": True, "result": result}
-    else:
-        wa = f"https://wa.me/55{phone}?text={message}"
-        return {"ok": False, "wa_link": wa, "note": "Envio via API não configurado, abra o link manualmente."}
+    for c in clientes:
+        calcular_valor(c)
+    return clientes
+
+
+# 🧩 Cadastrar novo cliente
+@app.post("/cadastrar")
+def cadastrar_cliente(cliente: dict):
+    cliente["telefone"] = cliente.get("telefone", "").strip()
+    with open(DATA_FILE, "r", encoding="utf-8") as f:
+        dados = json.load(f)
+    dados.append(cliente)
+    with open(DATA_FILE, "w", encoding="utf-8") as f:
+        json.dump(dados, f, ensure_ascii=False, indent=2)
+    return {"mensagem": "Cliente cadastrado com sucesso."}
+
+
+# 🧩 Editar cliente existente
+@app.post("/editar/{index}")
+def editar_cliente(index: int, cliente: dict):
+    with open(DATA_FILE, "r", encoding="utf-8") as f:
+        dados = json.load(f)
+
+    if 0 <= index < len(dados):
+        cliente["telefone"] = cliente.get("telefone", "").strip()
+        dados[index] = cliente
+        with open(DATA_FILE, "w", encoding="utf-8") as f:
+            json.dump(dados, f, ensure_ascii=False, indent=2)
+        return {"mensagem": "Cliente atualizado com sucesso."}
+
+    return {"erro": "Cliente não encontrado."}
+
+
+# 🧩 Excluir cliente
+@app.delete("/cliente/{index}")
+def excluir_cliente(index: int):
+    with open(DATA_FILE, "r", encoding="utf-8") as f:
+        dados = json.load(f)
+    if 0 <= index < len(dados):
+        removido = dados.pop(index)
+        with open(DATA_FILE, "w", encoding="utf-8") as f:
+            json.dump(dados, f, ensure_ascii=False, indent=2)
+        return {"mensagem": f"Cliente {removido.get('nome')} removido com sucesso."}
+    return {"erro": "Cliente não encontrado."}
