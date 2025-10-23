@@ -79,12 +79,27 @@ async def cadastrar(request: Request):
 # 📊 Listar clientes
 @app.get("/clientes")
 def listar_clientes():
-    with open(DATA_FILE, "r", encoding="utf-8") as f:
-        clientes = json.load(f)
+    try:
+        # Garante que o arquivo existe
+        if not os.path.exists(DATA_FILE):
+            with open(DATA_FILE, "w", encoding="utf-8") as f:
+                json.dump([], f)
 
-    clientes_atualizados = [atualizar_valor(c) for c in clientes]
+        with open(DATA_FILE, "r", encoding="utf-8") as f:
+            clientes = json.load(f)
 
-    with open(DATA_FILE, "w", encoding="utf-8") as f:
-        json.dump(clientes_atualizados, f, indent=4, ensure_ascii=False)
+        # Se estiver vazio, retorna lista vazia
+        if not isinstance(clientes, list):
+            clientes = []
 
-    return clientes_atualizados
+        # Atualiza valores de todos os clientes
+        clientes_atualizados = [atualizar_valor(c) for c in clientes]
+
+        # Salva os dados atualizados
+        with open(DATA_FILE, "w", encoding="utf-8") as f:
+            json.dump(clientes_atualizados, f, indent=4, ensure_ascii=False)
+
+        return JSONResponse(content=clientes_atualizados)
+
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"erro": str(e)})
