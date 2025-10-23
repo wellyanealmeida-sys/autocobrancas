@@ -1,11 +1,11 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 import json, os
-from datetime import datetime
+from datetime import datetime, timedelta
 
-app = FastAPI(title="LW Mútuo Mercantil - AutoCobranças")
+app = FastAPI(title="LW Mútuo Mercantil - AutoCobranças (Modelo Oficial)")
 
-# Configuração CORS (permite acesso do GitHub Pages)
+# CORS para o frontend (GitHub Pages)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -15,72 +15,121 @@ app.add_middleware(
 )
 
 DATA_FILE = os.path.join("data", "clientes.json")
-
-# Cria pasta e arquivo, se não existir
+os.makedirs("data", exist_ok=True)
 if not os.path.exists(DATA_FILE):
-    os.makedirs("data", exist_ok=True)
     with open(DATA_FILE, "w", encoding="utf-8") as f:
         json.dump([], f, ensure_ascii=False, indent=2)
 
 
-# Função auxiliar: calcular juros e valor atualizado
-def calcular_valor(cliente):
+# ---------- Utilidades ----------
+
+def parse_date(date_str: str):
+    """Tenta YYYY-MM-DD e DD/MM/YYYY."""
+    if not date_str:
+        return None
+    for fmt in ("%Y-%m-%d", "%d/%m/%Y"):
+        try:
+            return datetime.strptime(date_str, fmt).date()
+        except Exception:
+            continue
+    return None
+
+def contar_dias_uteis(inicio_exclusivo, fim_inclusivo):
+    """
+    Conta apenas dias úteis (seg–sex) no intervalo (inicio_exclusivo, fim_inclusivo].
+    Se hoje <= vencimento: 0.
+    """
+    if fim_inclusivo is None or inicio_exclusivo is None:
+        return 0
+    if fim_inclusivo <= inicio_exclusivo:
+        return 0
+    d = inicio_exclusivo + timedelta(days=1)  # começa no dia seguinte ao início
+    dias = 0
+    while d <= fim_inclusivo:
+        if d.weekday() < 5:  # 0=segunda ... 4=sexta
+            dias += 1
+        d += timedelta(days=1)
+    return dias
+
+def validar_cliente(cliente: dict):
+    obrig = ["nome", "valor_credito", "data_credito", "data_vencimento", "juros_mensal", "juros_diario", "telefone"]
+    for campo in obrig:
+        if str(cliente.get(campo, "")).strip() == "":
+            raise HTTPException(status_code=400, detail=f"O campo '{campo}' é obrigatório.")
+
+    # normaliza telefone
+    tel = cliente["telefone"].replace("+", "").replace(" ", "").replace("-", "")
+    if not tel.isdigit() or len(tel) < 10:
+        raise HTTPException(status_code=400, detail="Telefone inválido. Use o formato 5561XXXXXXXX.")
+    cliente["telefone"] = tel
+
+    # numéricos
     try:
-        data_credito = datetime.strptime(cliente.get("data_credito", ""), "%Y-%m-%d")
+        cliente["valor_credito"] = float(cliente["valor_credito"])
+        cliente["juros_mensal"] = float(cliente["juros_mensal"])
+        cliente["juros_diario"] = float(cliente["juros_diario"])
     except Exception:
-        cliente["dias_corridos"] = 0
-        cliente["valor_total"] = cliente.get("valor_base", 0)
-        return cliente
+        raise HTTPException(status_code=400, detail="Campos numéricos inválidos (valor_credito, juros_mensal, juros_diario).")
 
-    dias = (datetime.now() - data_credito).days
-    if dias < 0:
-        dias = 0
+    # datas
+    dc = parse_date(cliente.get("data_credito"))
+    dv = parse_date(cliente.get("data_vencimento"))
+    if not dc or not dv:
+        raise HTTPException(status_code=400, detail="Datas inválidas. Use YYYY-MM-DD ou DD/MM/YYYY.")
+    cliente["data_credito"] = dc.strftime("%Y-%m-%d")
+    cliente["data_vencimento"] = dv.strftime("%Y-%m-%d")
+    return cliente
 
-    juros_diario = float(cliente.get("juros_diario", 0))
-    valor_base = float(cliente.get("valor_base", 0))
-    valor_total = valor_base * ((1 + juros_diario / 100) ** dias)
-    juros_mes = round(juros_diario * 30, 2)
+def calcular_valores(cliente: dict):
+    """
+    Valor atualizado = valor_credito + juros_mensal_valor + juros_diario_valor
+    - Juros mensal (%): sempre sobre valor_credito
+    - Juros diário (%): apenas após o vencimento; conta somente dias úteis; simples (não composto).
+      (ex.: 3 dias úteis com 0,5%/dia sobre valor_credito => 0,015 * valor_credito)
+    """
+    valor_credito = float(cliente.get("valor_credito", 0) or 0)
+    juros_mensal = float(cliente.get("juros_mensal", 0) or 0)       # %
+    juros_diario = float(cliente.get("juros_diario", 0) or 0)       # % ao dia útil
 
-    cliente["dias_corridos"] = dias
-    cliente["valor_total"] = round(valor_total, 2)
-    cliente["juros_mes"] = juros_mes
+    # datas
+    data_venc = parse_date(cliente.get("data_vencimento"))
+    hoje = datetime.now().date()
+
+    # 1) Juros mensal (sempre sobre o valor de crédito)
+    juros_mensal_valor = valor_credito * (juros_mensal / 100.0)
+
+    # 2) Juros diário após vencimento (dias úteis)
+    dias_uteis_atraso = 0
+    juros_diario_valor = 0.0
+    if data_venc and hoje > data_venc and juros_diario > 0:
+        dias_uteis_atraso = contar_dias_uteis(data_venc, hoje)
+        juros_diario_valor = valor_credito * (juros_diario / 100.0) * dias_uteis_atraso
+
+    valor_total = round(valor_credito + juros_mensal_valor + juros_diario_valor, 2)
+
+    # campos de apoio para o frontend
+    cliente["juros_mensal_valor"] = round(juros_mensal_valor, 2)
+    cliente["juros_diario_valor"] = round(juros_diario_valor, 2)
+    cliente["dias_uteis_atraso"] = dias_uteis_atraso
+    cliente["valor_total"] = valor_total
     return cliente
 
 
-# Página inicial da API
+# ---------- Rotas ----------
+
 @app.get("/")
 def home():
-    return {"mensagem": "API LW Mútuo Mercantil ativa."}
+    return {"mensagem": "API LW ativa (modelo oficial: juros mensal + diário em dias úteis)."}
 
-
-# Listar todos os clientes
 @app.get("/clientes")
 def listar_clientes():
     with open(DATA_FILE, "r", encoding="utf-8") as f:
         clientes = json.load(f)
-    for c in clientes:
-        calcular_valor(c)
-    return clientes
+    # calcula valores em tempo real (não sobrescreve o arquivo)
+    return [calcular_valores(dict(c)) for c in clientes]
 
-
-# Função para validar dados obrigatórios
-def validar_cliente(cliente: dict):
-    obrigatorios = ["nome", "data_credito", "valor_base", "telefone"]
-    for campo in obrigatorios:
-        valor = str(cliente.get(campo, "")).strip()
-        if not valor:
-            raise HTTPException(status_code=400, detail=f"O campo '{campo}' é obrigatório.")
-    # Valida formato do telefone (precisa começar com DDI, ex: 5561...)
-    telefone = cliente["telefone"].replace("+", "").replace(" ", "").replace("-", "")
-    if not telefone.isdigit() or len(telefone) < 10:
-        raise HTTPException(status_code=400, detail="Número de telefone inválido. Use o formato 5561XXXXXXXXX.")
-    cliente["telefone"] = telefone
-    return cliente
-
-
-# Cadastrar novo cliente
 @app.post("/cadastrar")
-def cadastrar_cliente(cliente: dict):
+def cadastrar(cliente: dict):
     cliente = validar_cliente(cliente)
     with open(DATA_FILE, "r", encoding="utf-8") as f:
         dados = json.load(f)
@@ -89,10 +138,8 @@ def cadastrar_cliente(cliente: dict):
         json.dump(dados, f, ensure_ascii=False, indent=2)
     return {"mensagem": "Cliente cadastrado com sucesso."}
 
-
-# Editar cliente existente
 @app.post("/editar/{index}")
-def editar_cliente(index: int, cliente: dict):
+def editar(index: int, cliente: dict):
     cliente = validar_cliente(cliente)
     with open(DATA_FILE, "r", encoding="utf-8") as f:
         dados = json.load(f)
@@ -103,10 +150,8 @@ def editar_cliente(index: int, cliente: dict):
         return {"mensagem": "Cliente atualizado com sucesso."}
     raise HTTPException(status_code=404, detail="Cliente não encontrado.")
 
-
-# Excluir cliente
 @app.delete("/cliente/{index}")
-def excluir_cliente(index: int):
+def deletar(index: int):
     with open(DATA_FILE, "r", encoding="utf-8") as f:
         dados = json.load(f)
     if 0 <= index < len(dados):
