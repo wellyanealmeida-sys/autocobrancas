@@ -21,7 +21,8 @@ if not os.path.exists(DATA_FILE):
 
 # ---------- util ----------
 def parse_date(s: str):
-    if not s: return None
+    if not s:
+        return None
     for fmt in ("%Y-%m-%d", "%d/%m/%Y"):
         try:
             return datetime.strptime(s, fmt).date()
@@ -48,31 +49,23 @@ def validar_cliente(cli: dict):
         if str(cli.get(c,"")).strip() == "":
             raise HTTPException(400, f"O campo '{c}' é obrigatório.")
 
-    # telefone
     tel = cli.get("telefone","").replace("+","").replace(" ","").replace("-","")
     if not tel.isdigit() or len(tel) < 10:
         raise HTTPException(400, "Telefone inválido. Use 5561XXXXXXXX.")
     cli["telefone"] = tel
 
-    # numéricos
     try:
         cli["valor_credito"] = float(cli["valor_credito"])
-        cli["juros_mensal"] = float(cli["juros_mensal"])  # %
+        cli["juros_mensal"] = float(cli["juros_mensal"])
     except Exception:
         raise HTTPException(400, "valor_credito/juros_mensal inválidos.")
 
-    # juros diário em R$ por dia útil (novo campo)
-    # compatibilidade: se vier "juros_diario_valor" usa; se não, e vier "juros_diario",
-    # interpreta "juros_diario" como R$ por dia (não %).
-    jd_val = cli.get("juros_diario_valor", None)
-    if jd_val is None:
-        jd_val = cli.get("juros_diario", 0)  # compat
+    jd_val = cli.get("juros_diario_valor", cli.get("juros_diario", 0))
     try:
         cli["juros_diario_valor"] = float(jd_val or 0.0)
     except Exception:
         raise HTTPException(400, "juros_diario_valor inválido (use valor em R$ por dia útil).")
 
-    # datas
     dc = parse_date(cli.get("data_credito"))
     dv = parse_date(cli.get("data_vencimento"))
     if not dc or not dv:
@@ -83,23 +76,20 @@ def validar_cliente(cli: dict):
 
 def calcular_valores(cli: dict):
     valor_credito = float(cli.get("valor_credito", 0) or 0)
-    juros_mensal  = float(cli.get("juros_mensal", 0) or 0)           # %
-    jd_r$         = float(cli.get("juros_diario_valor", 0) or 0)     # R$/dia útil
+    juros_mensal  = float(cli.get("juros_mensal", 0) or 0)
+    jd_r = float(cli.get("juros_diario_valor", 0) or 0)  # valor fixo em R$/dia útil
 
     venc = parse_date(cli.get("data_vencimento"))
     hoje = datetime.now().date()
 
-    # 1) juros mensal (sempre até o vencimento) sobre o valor de crédito
-    juros_mensal_valor = valor_credito * (juros_mensal/100.0)
-
-    # 2) juros diário fixo (em R$ por dia útil) só após vencimento
+    juros_mensal_valor = valor_credito * (juros_mensal / 100.0)
     dias_atraso = dias_uteis_apos_vencimento(venc, hoje)
-    juros_diario_total = jd_r$ * dias_atraso
+    juros_diario_total = jd_r * dias_atraso
 
     valor_total = round(valor_credito + juros_mensal_valor + juros_diario_total, 2)
 
     cli["juros_mensal_valor"] = round(juros_mensal_valor, 2)
-    cli["juros_diario_valor_dia"] = round(jd_r$, 2)
+    cli["juros_diario_valor_dia"] = round(jd_r, 2)
     cli["juros_diario_total"] = round(juros_diario_total, 2)
     cli["dias_uteis_atraso"] = dias_atraso
     cli["valor_total"] = valor_total
@@ -108,7 +98,7 @@ def calcular_valores(cli: dict):
 # ---------- rotas ----------
 @app.get("/")
 def home():
-    return {"msg":"API LW ativa (juros diário em R$ por dia útil, após vencimento)."}
+    return {"msg": "API LW ativa (juros diário em R$ por dia útil, após vencimento)."}
 
 @app.get("/clientes")
 def clientes():
@@ -124,7 +114,7 @@ def cadastrar(cli: dict):
     arr.append(cli)
     with open(DATA_FILE, "w", encoding="utf-8") as f:
         json.dump(arr, f, ensure_ascii=False, indent=2)
-    return {"mensagem":"Cliente cadastrado."}
+    return {"mensagem": "Cliente cadastrado."}
 
 @app.post("/editar/{i}")
 def editar(i: int, cli: dict):
@@ -135,7 +125,7 @@ def editar(i: int, cli: dict):
         arr[i] = cli
         with open(DATA_FILE, "w", encoding="utf-8") as f:
             json.dump(arr, f, ensure_ascii=False, indent=2)
-        return {"mensagem":"Cliente atualizado."}
+        return {"mensagem": "Cliente atualizado."}
     raise HTTPException(404, "Cliente não encontrado.")
 
 @app.delete("/cliente/{i}")
