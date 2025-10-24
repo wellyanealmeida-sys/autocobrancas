@@ -16,7 +16,6 @@
     <main>
       <section id="form-section" class="card">
         <h2>Cadastrar / Editar Cliente</h2>
-
         <form id="cliente-form">
           <div class="form-grid">
             <input id="nome" placeholder="Nome do Cliente" required />
@@ -30,16 +29,19 @@
             <input id="associados" placeholder="Associados" />
             <input id="telefone" placeholder="Telefone (5561XXXXXXXX)" required />
           </div>
-
           <div class="btn-center">
             <button type="submit" class="btn-save">💾 Salvar Cliente</button>
           </div>
         </form>
       </section>
 
-      <section id="clientes-section" class="card">
-        <h2>Clientes Cadastrados</h2>
-        <div id="clientes-list" class="clientes-container"></div>
+      <section class="card">
+        <h2>Clientes</h2>
+        <input id="busca" placeholder="🔍 Buscar por nome..." style="width:100%;margin-bottom:12px;padding:10px;border-radius:8px;border:1px solid #333;background:#121212;color:#fff" />
+        <h3 style="color:#d4af37;margin-top:10px">📂 Ativos</h3>
+        <div id="lista-ativos" class="clientes-container"></div>
+        <h3 style="color:#d4af37;margin-top:20px">💰 Quitados</h3>
+        <div id="lista-quitados" class="clientes-container"></div>
       </section>
     </main>
 
