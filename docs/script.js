@@ -2,46 +2,49 @@ const API_BASE = "https://autocobrancas.onrender.com";
 const PIX_KEY = "dcb448d4-2b4b-4f25-9097-95d800d3638a";
 
 let editIndex = null;
-let cache = []; // cache da última lista vinda do backend
+let cache = [];
 
-// ======== CARREGAR CLIENTES ========
+function fmtDataHora(iso) {
+  if (!iso) return "-";
+  try {
+    const d = new Date(iso);
+    return d.toLocaleString("pt-BR");
+  } catch { return "-"; }
+}
+
 async function carregarClientes() {
   const res = await fetch(`${API_BASE}/clientes`);
   cache = await res.json();
   renderizar();
 }
 
-// ======== RENDERIZAÇÃO (busca e separação de listas) ========
 function renderizar() {
-  const termo = (document.getElementById("busca").value || "").toLowerCase().trim();
-  const ativos = cache.filter(
-    (c) => (c.status || "ativo") === "ativo" && c.nome.toLowerCase().includes(termo)
-  );
-  const quitados = cache.filter(
-    (c) => (c.status || "ativo") === "quitado" && c.nome.toLowerCase().includes(termo)
-  );
+  const termo = (document.getElementById("busca")?.value || "").toLowerCase().trim();
+  const ativos = cache.filter(c => (c.status || "ativo") === "ativo" && c.nome.toLowerCase().includes(termo));
+  const quitados = cache.filter(c => (c.status || "ativo") === "quitado" && c.nome.toLowerCase().includes(termo));
   renderLista(ativos, document.getElementById("lista-ativos"), true);
   renderLista(quitados, document.getElementById("lista-quitados"), false);
 }
 
-function cardHTML(c, i, isAtivo) {
+function cardHTML(c, idx, isAtivo) {
   const jurosMensal = `${(c.juros_mensal ?? 0)}% → R$ ${(c.juros_mensal_valor ?? 0).toFixed(2)}`;
-  const diarioLinha = `R$ ${(c.juros_diario_valor_dia ?? 0).toFixed(2)} × ${
-    c.dias_uteis_atraso ?? 0
-  } dias úteis → R$ ${(c.juros_diario_total ?? 0).toFixed(2)}`;
+  const diarioLinha = `R$ ${(c.juros_diario_valor_dia ?? 0).toFixed(2)} × ${(c.dias_uteis_atraso ?? 0)} dias úteis → R$ ${(c.juros_diario_total ?? 0).toFixed(2)}`;
   return `
     <div class="cliente-card">
       <h3>${c.nome} ${!isAtivo ? ' <span style="color:#25d366;font-size:12px;">(quitado)</span>' : ''}</h3>
       <p><b>Valor Crédito:</b> R$ ${(c.valor_credito ?? 0).toFixed(2)}</p>
-      <p><b>Data Vencimento:</b> ${c.data_vencimento}</p>
+      <p><b>Data Vencimento:</b> ${c.data_vencimento || "-"}</p>
       <p><b>Juros Mensal:</b> ${jurosMensal}</p>
       <p><b>Juros Diário:</b> ${diarioLinha}</p>
       <p><b>Valor Atualizado:</b> <b style="color:#d4af37">R$ ${(c.valor_total ?? 0).toFixed(2)}</b></p>
+      <p style="color:#9aa; font-size:12px;"><b>Último envio:</b> ${fmtDataHora(c.ultimo_envio)}</p>
       <div class="buttons">
-        ${isAtivo ? `<button class="whatsapp" onclick="enviarWhatsapp(${i})">💬 WhatsApp</button>` : ""}
-        ${isAtivo ? `<button class="edit" onclick="editarCliente(${i})">✏️ Editar</button>` : ""}
-        ${isAtivo ? `<button class="delete" onclick="excluirCliente(${i})">❌ Excluir</button>` : `<button class="delete" onclick="excluirCliente(${i})">❌ Excluir</button>`}
-        ${isAtivo ? `<button class="edit" style="background:#8b5cf6" onclick="quitar(${i})">💰 Quitar</button>` : `<button class="edit" style="background:#0ea5e9" onclick="reativar(${i})">♻️ Reativar</button>`}
+        ${isAtivo ? `<button class="whatsapp" onclick="enviarWhatsapp(${idx})">💬 WhatsApp</button>` : ""}
+        ${isAtivo ? `<button class="edit" onclick="editarCliente(${idx})">✏️ Editar</button>` : ""}
+        <button class="delete" onclick="excluirCliente(${idx})">❌ Excluir</button>
+        ${isAtivo
+          ? `<button class="edit" style="background:#8b5cf6" onclick="quitar(${idx})">💰 Quitar</button>`
+          : `<button class="edit" style="background:#0ea5e9" onclick="reativar(${idx})">♻️ Reativar</button>`}
       </div>
     </div>
   `;
@@ -49,20 +52,16 @@ function cardHTML(c, i, isAtivo) {
 
 function renderLista(arr, el, isAtivo) {
   el.innerHTML =
-    arr
-      .map((c) => {
-        const idxReal = cache.findIndex(
-          (k) =>
-            k.nome === c.nome &&
-            k.data_credito === c.data_credito &&
-            k.data_vencimento === c.data_vencimento
-        );
-        return cardHTML(c, idxReal, isAtivo);
-      })
-      .join("") || `<div class="cliente-card"><p>Nenhum cliente encontrado.</p></div>`;
+    arr.map(c => {
+      const idx = cache.findIndex(k =>
+        k.nome === c.nome &&
+        k.data_credito === c.data_credito &&
+        k.data_vencimento === c.data_vencimento
+      );
+      return cardHTML(c, idx, isAtivo);
+    }).join("") || `<div class="cliente-card"><p>Nenhum cliente encontrado.</p></div>`;
 }
 
-// ======== SALVAR CLIENTE ========
 async function salvarCliente(ev) {
   ev.preventDefault();
 
@@ -72,18 +71,18 @@ async function salvarCliente(ev) {
     data_credito: data_credito.value,
     data_vencimento: data_vencimento.value,
     juros_mensal: parseFloat(juros_mensal.value || 0),
-    juros_diario_valor: parseFloat(juros_diario.value || 0),
+    juros_diario_valor: parseFloat(juros_diario.value || 0), // R$ por dia útil
     objeto_empenho: objeto_empenho.value.trim(),
     documento: documento.value.trim(),
     associados: associados.value.trim(),
     telefone: telefone.value.trim(),
   };
 
-  // manter status anterior ao editar
   if (editIndex !== null) {
     const res = await fetch(`${API_BASE}/clientes`);
     const atual = await res.json();
     payload.status = atual[editIndex]?.status || "ativo";
+    payload.ultimo_envio = atual[editIndex]?.ultimo_envio || null;
   }
 
   const url = editIndex !== null ? `${API_BASE}/editar/${editIndex}` : `${API_BASE}/cadastrar`;
@@ -94,8 +93,7 @@ async function salvarCliente(ev) {
   });
 
   if (!r.ok) {
-    const t = await r.text();
-    alert("Erro ao salvar: " + t);
+    alert("Erro ao salvar: " + (await r.text()));
     return;
   }
 
@@ -103,10 +101,8 @@ async function salvarCliente(ev) {
   document.getElementById("cliente-form").reset();
   editIndex = null;
   await carregarClientes();
-  window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
 }
 
-// ======== EDIÇÃO, EXCLUSÃO, QUITAÇÃO ========
 async function excluirCliente(i) {
   if (!confirm("Excluir este cliente?")) return;
   await fetch(`${API_BASE}/cliente/${i}`, { method: "DELETE" });
@@ -145,14 +141,15 @@ async function reativar(i) {
   carregarClientes();
 }
 
-// ======== ENVIO DE WHATSAPP (mensagem atualizada) ========
 async function enviarWhatsapp(i) {
-  const res = await fetch(`${API_BASE}/clientes`);
-  const clientes = await res.json();
-  const c = clientes[i];
-  if (!c.telefone) return alert("Telefone não cadastrado!");
+  // registra "último envio" no backend
+  await fetch(`${API_BASE}/registrar_envio/${i}`, { method: "POST" });
 
-  // saldo = juros mensal + juros diário
+  // recarrega para refletir o horário na tela
+  await carregarClientes();
+  const c = cache[i];
+  if (!c || !c.telefone) return alert("Telefone não cadastrado!");
+
   const saldo_total = (c.juros_mensal_valor || 0) + (c.juros_diario_total || 0);
 
   const mensagem = `Olá ${c.nome}! 💰
@@ -172,7 +169,6 @@ LW Mútuo Mercantil`;
   window.open(url, "_blank");
 }
 
-// ======== EVENTOS ========
 document.getElementById("cliente-form").addEventListener("submit", salvarCliente);
 document.getElementById("busca").addEventListener("input", renderizar);
 carregarClientes();
