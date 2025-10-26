@@ -120,19 +120,30 @@ def validar_cliente(cli: dict):
     except Exception:
         raise HTTPException(400, "valor_credito/juros_mensal inválidos.")
 
-    # juros diário em R$ por dia útil (compat: aceita 'juros_diario' antigo)
+    # Juros diário em R$/dia útil (compat aceita 'juros_diario')
     jd_val = cli.get("juros_diario_valor", cli.get("juros_diario", 0))
     try:
         cli["juros_diario_valor"] = float(jd_val or 0.0)
     except Exception:
         raise HTTPException(400, "juros_diario_valor inválido (R$ por dia útil).")
 
+    # Datas
     dc = parse_date(cli.get("data_credito"))
     dv = parse_date(cli.get("data_vencimento"))
     if not dc or not dv:
         raise HTTPException(400, "Datas inválidas. Use YYYY-MM-DD ou DD/MM/YYYY.")
     cli["data_credito"] = dc.strftime("%Y-%m-%d")
     cli["data_vencimento"] = dv.strftime("%Y-%m-%d")
+
+    # Normaliza associados: lista de strings
+    assoc = cli.get("associados", [])
+    if isinstance(assoc, str):
+        assoc = [s.strip() for s in assoc.split(",") if s.strip()]
+    elif isinstance(assoc, list):
+        assoc = [str(s).strip() for s in assoc if str(s).strip()]
+    else:
+        assoc = []
+    cli["associados"] = assoc
 
     status = (cli.get("status") or "ativo").lower().strip()
     cli["status"] = "quitado" if status == "quitado" else "ativo"
