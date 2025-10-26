@@ -89,3 +89,23 @@ footer { text-align:center; padding:16px; color:#888; font-size:.9rem; }
 @media (max-width: 720px) {
   .form-grid { grid-template-columns: 1fr; }
 }
+/* Inadimplentes */
+.cliente-card.inad {
+  background-color: #2a1515;
+  border: 1px solid #b3261e;
+}
+.badge-inad {
+  display:inline-block;
+  background:#b3261e;
+  color:#fff;
+  padding:2px 8px;
+  border-radius: 10px;
+  font-size: 12px;
+  margin-left: 6px;
+}
+.note-inad {
+  color:#ffb4a9;
+  font-size:12px;
+  margin-top:6px;
+}
+
