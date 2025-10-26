@@ -1,41 +1,93 @@
 const API_BASE = "https://autocobrancas.onrender.com";
 const PIX_KEY = "dcb448d4-2b4b-4f25-9097-95d800d3638a";
+const ADMIN_PASS = "lw2025";
 
 let editIndex = null;
 let cache = [];
+let associadosArray = [];
 
+// ---------- Utils ----------
+function qs(id) { return document.getElementById(id); }
 function fmtDataHora(iso) {
   if (!iso) return "-";
-  try {
-    const d = new Date(iso);
-    return d.toLocaleString("pt-BR");
-  } catch { return "-"; }
+  try { return new Date(iso).toLocaleString("pt-BR"); } catch { return "-"; }
 }
 
+// ---------- Abas ----------
+document.querySelectorAll(".tab-btn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    const tab = btn.getAttribute("data-tab");
+    document.querySelectorAll(".tab").forEach(t => t.classList.remove("show"));
+    qs(tab).classList.add("show");
+    if (tab === "tab-detalhes") {
+      // conteúdo admin bloqueado
+      if (qs("admin-content").style.display !== "block") {
+        // aguarda senha
+      } else {
+        renderAdmin();
+      }
+    }
+  });
+});
+
+function unlockAdmin() {
+  const p = qs("admin-pass").value.trim();
+  if (p === ADMIN_PASS) {
+    qs("admin-lock").style.display = "none";
+    qs("admin-content").style.display = "block";
+    renderAdmin();
+  } else {
+    alert("Senha incorreta.");
+  }
+}
+
+// ---------- Associados (chips) ----------
+function refreshAssociadosChips() {
+  const box = qs("associados-chips");
+  box.innerHTML = associadosArray.map((n, idx) => `
+    <span class="chip">${n} <button type="button" onclick="removeAssociado(${idx})">x</button></span>
+  `).join("");
+}
+function addAssociado() {
+  const val = qs("assoc-input").value.trim();
+  if (!val) return;
+  associadosArray.push(val);
+  qs("assoc-input").value = "";
+  refreshAssociadosChips();
+}
+function removeAssociado(i) {
+  associadosArray.splice(i,1);
+  refreshAssociadosChips();
+}
+
+// ---------- Carregar / Renderizar ----------
 async function carregarClientes() {
   const res = await fetch(`${API_BASE}/clientes`);
   cache = await res.json();
-  renderizar();
+  renderCobrancas();
+  if (qs("admin-content").style.display === "block") renderAdmin();
 }
 
-function renderizar() {
-  const termo = (document.getElementById("busca")?.value || "").toLowerCase().trim();
-  const ativos = cache.filter(c => (c.status || "ativo") === "ativo" && c.nome.toLowerCase().includes(termo));
-  const quitados = cache.filter(c => (c.status || "ativo") === "quitado" && c.nome.toLowerCase().includes(termo));
-  renderLista(ativos, document.getElementById("lista-ativos"), true);
-  renderLista(quitados, document.getElementById("lista-quitados"), false);
+function renderCobrancas() {
+  const termo = (qs("busca")?.value || "").toLowerCase().trim();
+  const ativos = cache.filter(c => (c.status || "ativo")==="ativo" && c.nome.toLowerCase().includes(termo));
+  const quitados = cache.filter(c => (c.status || "ativo")==="quitado" && c.nome.toLowerCase().includes(termo));
+  renderLista(ativos, qs("lista-ativos"), true);
+  renderLista(quitados, qs("lista-quitados"), false);
 }
 
 function cardHTML(c, idx, isAtivo) {
-  const jurosMensal = `${(c.juros_mensal ?? 0)}% → R$ ${(c.juros_mensal_valor ?? 0).toFixed(2)}`;
-  const diarioLinha = `R$ ${(c.juros_diario_valor_dia ?? 0).toFixed(2)} × ${(c.dias_uteis_atraso ?? 0)} dias úteis → R$ ${(c.juros_diario_total ?? 0).toFixed(2)}`;
+  const mensal = `${(c.juros_mensal ?? 0)}% → R$ ${(c.juros_mensal_valor ?? 0).toFixed(2)}`;
+  const diario = `R$ ${(c.juros_diario_valor_dia ?? 0).toFixed(2)} × ${(c.dias_uteis_atraso ?? 0)} dias úteis → R$ ${(c.juros_diario_total ?? 0).toFixed(2)}`;
   return `
     <div class="cliente-card">
-      <h3>${c.nome} ${!isAtivo ? ' <span style="color:#25d366;font-size:12px;">(quitado)</span>' : ''}</h3>
+      <h3>${c.nome} ${!isAtivo ? '<span style="color:#25d366;font-size:12px;">(quitado)</span>' : ''}</h3>
       <p><b>Valor Crédito:</b> R$ ${(c.valor_credito ?? 0).toFixed(2)}</p>
       <p><b>Data Vencimento:</b> ${c.data_vencimento || "-"}</p>
-      <p><b>Juros Mensal:</b> ${jurosMensal}</p>
-      <p><b>Juros Diário:</b> ${diarioLinha}</p>
+      <p><b>Juros Mensal:</b> ${mensal}</p>
+      <p><b>Juros Diário:</b> ${diario}</p>
       <p><b>Valor Atualizado:</b> <b style="color:#d4af37">R$ ${(c.valor_total ?? 0).toFixed(2)}</b></p>
       <p style="color:#9aa; font-size:12px;"><b>Último envio:</b> ${fmtDataHora(c.ultimo_envio)}</p>
       <div class="buttons">
@@ -46,36 +98,61 @@ function cardHTML(c, idx, isAtivo) {
           ? `<button class="edit" style="background:#8b5cf6" onclick="quitar(${idx})">💰 Quitar</button>`
           : `<button class="edit" style="background:#0ea5e9" onclick="reativar(${idx})">♻️ Reativar</button>`}
       </div>
-    </div>
-  `;
+    </div>`;
 }
 
 function renderLista(arr, el, isAtivo) {
-  el.innerHTML =
-    arr.map(c => {
-      const idx = cache.findIndex(k =>
-        k.nome === c.nome &&
-        k.data_credito === c.data_credito &&
-        k.data_vencimento === c.data_vencimento
-      );
-      return cardHTML(c, idx, isAtivo);
-    }).join("") || `<div class="cliente-card"><p>Nenhum cliente encontrado.</p></div>`;
+  el.innerHTML = arr.map(c => {
+    const idx = cache.findIndex(k => k.nome===c.nome && k.data_credito===c.data_credito && k.data_vencimento===c.data_vencimento);
+    return cardHTML(c, idx, isAtivo);
+  }).join("") || `<div class="cliente-card"><p>Nenhum cliente encontrado.</p></div>`;
 }
 
+// ---------- Admin Detalhes ----------
+function renderAdmin() {
+  const termo = (qs("busca-admin")?.value || "").toLowerCase().trim();
+  const arr = cache.filter(c => c.nome.toLowerCase().includes(termo));
+  qs("lista-admin").innerHTML = arr.map(c => `
+    <div class="cliente-card">
+      <h3>${c.nome} <span style="font-size:12px;color:#aaa;">(${c.status || "ativo"})</span></h3>
+      <p><b>Telefone:</b> ${c.telefone || "-"}</p>
+      <p><b>Valor Crédito:</b> R$ ${(c.valor_credito ?? 0).toFixed(2)}</p>
+      <p><b>Data Crédito:</b> ${c.data_credito || "-"}</p>
+      <p><b>Data Vencimento:</b> ${c.data_vencimento || "-"}</p>
+      <p><b>Juros Mensal (%):</b> ${c.juros_mensal ?? 0}</p>
+      <p><b>Juros Diário (R$/dia útil):</b> ${c.juros_diario_valor_dia?.toFixed(2) ?? (c.juros_diario_valor ?? 0).toFixed?.(2) ?? c.juros_diario_valor}</p>
+      <p><b>Objeto de Empenho:</b> ${c.objeto_empenho || "-"}</p>
+      <p><b>Documento / Procuração:</b> ${c.documento || "-"}</p>
+      <p><b>Associados:</b> ${(Array.isArray(c.associados) ? c.associados.join(", ") : (c.associados || "")) || "-"}</p>
+      <p><b>Último envio:</b> ${fmtDataHora(c.ultimo_envio)}</p>
+      <p><b>Valor Atualizado (info):</b> R$ ${(c.valor_total ?? 0).toFixed(2)}</p>
+    </div>
+  `).join("") || `<div class="cliente-card"><p>Nenhum cliente encontrado.</p></div>`;
+}
+
+// Busca
+["busca","busca-admin"].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener("input", () => {
+    if (id==="busca") renderCobrancas(); else renderAdmin();
+  });
+});
+
+// ---------- Salvar / Editar ----------
 async function salvarCliente(ev) {
   ev.preventDefault();
 
   const payload = {
-    nome: nome.value.trim(),
-    valor_credito: parseFloat(valor_credito.value || 0),
-    data_credito: data_credito.value,
-    data_vencimento: data_vencimento.value,
-    juros_mensal: parseFloat(juros_mensal.value || 0),
-    juros_diario_valor: parseFloat(juros_diario.value || 0), // R$ por dia útil
-    objeto_empenho: objeto_empenho.value.trim(),
-    documento: documento.value.trim(),
-    associados: associados.value.trim(),
-    telefone: telefone.value.trim(),
+    nome: qs("nome").value.trim(),
+    valor_credito: parseFloat(qs("valor_credito").value || 0),
+    data_credito: qs("data_credito").value,
+    data_vencimento: qs("data_vencimento").value,
+    juros_mensal: parseFloat(qs("juros_mensal").value || 0),
+    juros_diario_valor: parseFloat(qs("juros_diario").value || 0),
+    objeto_empenho: qs("objeto_empenho").value.trim(),
+    documento: qs("documento").value.trim(),
+    associados: associadosArray.slice(), // envia lista
+    telefone: qs("telefone").value.trim(),
   };
 
   if (editIndex !== null) {
@@ -92,21 +169,13 @@ async function salvarCliente(ev) {
     body: JSON.stringify(payload),
   });
 
-  if (!r.ok) {
-    alert("Erro ao salvar: " + (await r.text()));
-    return;
-  }
+  if (!r.ok) { alert("Erro ao salvar: " + (await r.text())); return; }
 
   alert(editIndex !== null ? "Cliente atualizado!" : "Cliente cadastrado!");
   document.getElementById("cliente-form").reset();
+  associadosArray = []; refreshAssociadosChips();
   editIndex = null;
   await carregarClientes();
-}
-
-async function excluirCliente(i) {
-  if (!confirm("Excluir este cliente?")) return;
-  await fetch(`${API_BASE}/cliente/${i}`, { method: "DELETE" });
-  carregarClientes();
 }
 
 async function editarCliente(i) {
@@ -115,18 +184,28 @@ async function editarCliente(i) {
   const c = clientes[i];
   editIndex = i;
 
-  nome.value = c.nome || "";
-  valor_credito.value = c.valor_credito || "";
-  data_credito.value = c.data_credito || "";
-  data_vencimento.value = c.data_vencimento || "";
-  juros_mensal.value = c.juros_mensal || "";
-  juros_diario.value = c.juros_diario_valor_dia || "";
-  objeto_empenho.value = c.objeto_empenho || "";
-  documento.value = c.documento || "";
-  associados.value = c.associados || "";
-  telefone.value = c.telefone || "";
+  qs("nome").value = c.nome || "";
+  qs("valor_credito").value = c.valor_credito || "";
+  qs("data_credito").value = c.data_credito || "";
+  qs("data_vencimento").value = c.data_vencimento || "";
+  qs("juros_mensal").value = c.juros_mensal || "";
+  qs("juros_diario").value = c.juros_diario_valor_dia || c.juros_diario_valor || "";
+  qs("objeto_empenho").value = c.objeto_empenho || "";
+  qs("documento").value = c.documento || "";
+  qs("telefone").value = c.telefone || "";
+
+  associadosArray = Array.isArray(c.associados)
+    ? c.associados.slice()
+    : (typeof c.associados === "string" && c.associados ? c.associados.split(",").map(s=>s.trim()) : []);
+  refreshAssociadosChips();
 
   window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+async function excluirCliente(i) {
+  if (!confirm("Excluir este cliente?")) return;
+  await fetch(`${API_BASE}/cliente/${i}`, { method: "DELETE" });
+  carregarClientes();
 }
 
 async function quitar(i) {
@@ -141,11 +220,9 @@ async function reativar(i) {
   carregarClientes();
 }
 
+// ---------- WhatsApp (sem associados na mensagem) ----------
 async function enviarWhatsapp(i) {
-  // registra "último envio" no backend
   await fetch(`${API_BASE}/registrar_envio/${i}`, { method: "POST" });
-
-  // recarrega para refletir o horário na tela
   await carregarClientes();
   const c = cache[i];
   if (!c || !c.telefone) return alert("Telefone não cadastrado!");
@@ -165,10 +242,46 @@ Chave: ${PIX_KEY}
 Atenciosamente,
 LW Mútuo Mercantil`;
 
-  const url = `https://wa.me/${c.telefone}?text=${encodeURIComponent(mensagem)}`;
-  window.open(url, "_blank");
+  window.open(`https://wa.me/${c.telefone}?text=${encodeURIComponent(mensagem)}`, "_blank");
 }
 
+// ---------- Exportar ----------
+function exportarJSON() {
+  const blob = new Blob([JSON.stringify(cache, null, 2)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "clientes.json";
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function exportarCSV() {
+  if (!cache.length) { alert("Sem dados para exportar."); return; }
+  // Cabeçalhos com TODOS os campos
+  const headers = [
+    "nome","telefone","valor_credito","data_credito","data_vencimento",
+    "juros_mensal","juros_mensal_valor","juros_diario_valor_dia","dias_uteis_atraso",
+    "juros_diario_total","valor_total","objeto_empenho","documento","associados","status","ultimo_envio"
+  ];
+  const rows = cache.map(c => [
+    c.nome || "", c.telefone || "", c.valor_credito || 0, c.data_credito || "", c.data_vencimento || "",
+    c.juros_mensal || 0, c.juros_mensal_valor || 0, c.juros_diario_valor_dia || c.juros_diario_valor || 0, c.dias_uteis_atraso || 0,
+    c.juros_diario_total || 0, c.valor_total || 0, c.objeto_empenho || "", c.documento || "",
+    Array.isArray(c.associados) ? c.associados.join("; ") : (c.associados || ""),
+    c.status || "ativo", c.ultimo_envio || ""
+  ]);
+
+  const csv = [headers.join(","), ...rows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(","))].join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "clientes.csv";
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+// ---------- Eventos ----------
 document.getElementById("cliente-form").addEventListener("submit", salvarCliente);
-document.getElementById("busca").addEventListener("input", renderizar);
+document.getElementById("busca").addEventListener("input", renderCobrancas);
+const ba = document.getElementById("busca-admin"); if (ba) ba.addEventListener("input", renderAdmin);
 carregarClientes();
