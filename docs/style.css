@@ -5,12 +5,7 @@ header {
   color: #d4af37;
   border-bottom: 2px solid #d4af37;
 }
-
-.subtitle {
-  color: #ccc;
-  font-size: 0.95rem;
-  margin-top: -5px;
-}
+.subtitle { color: #ccc; font-size: 0.95rem; margin-top: -5px; }
 
 body {
   font-family: "Poppins", Arial, sans-serif;
@@ -18,107 +13,79 @@ body {
   color: #f8f8f8;
   margin: 0;
 }
-
-main {
-  max-width: 900px;
-  margin: 40px auto;
-  padding: 0 15px;
-}
+main { max-width: 980px; margin: 30px auto; padding: 0 16px; }
 
 .card {
   background: #1a1a1d;
   border-radius: 15px;
-  padding: 25px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
-  margin-bottom: 35px;
+  padding: 22px;
+  box-shadow: 0 4px 12px rgba(0,0,0,.4);
+  margin-bottom: 24px;
 }
-
-h2 {
-  color: #d4af37;
-  margin-bottom: 15px;
-}
+h2 { color: #d4af37; margin: 0 0 16px; }
+.section-title { color:#d4af37; margin-top:14px; }
 
 .form-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 12px;
 }
-
-input {
+input, .search {
   padding: 10px 12px;
   border-radius: 8px;
   border: 1px solid #333;
   background-color: #121212;
   color: #fff;
+  width: 100%;
 }
+.search { margin-bottom: 12px; }
 
-.btn-center {
-  text-align: center;
-  margin-top: 15px;
-}
-
+.btn-center { text-align: center; margin-top: 15px; }
 .btn-save {
-  background-color: #d4af37;
-  color: #121212;
-  padding: 12px 25px;
-  font-weight: bold;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: all 0.2s;
+  background: #d4af37; color: #121212; padding: 12px 22px;
+  border: none; border-radius: 8px; font-weight: 700; cursor: pointer;
 }
+.btn-save:hover { filter: brightness(1.05); }
 
-.btn-save:hover {
-  background-color: #e6c64a;
-  transform: scale(1.03);
-}
-
-.clientes-container {
-  display: flex;
-  flex-direction: column;
-  gap: 15px;
-}
-
+.clientes-container { display: flex; flex-direction: column; gap: 12px; }
 .cliente-card {
-  background-color: #1e1e1e;
-  border: 1px solid #333;
-  border-radius: 12px;
-  padding: 15px 20px;
+  background-color: #1e1e1e; border: 1px solid #333;
+  border-radius: 12px; padding: 14px 16px;
 }
+.cliente-card h3 { color: #d4af37; margin: 0 0 8px; }
+.buttons { margin-top: 10px; display: flex; gap: 6px; flex-wrap: wrap; }
+button.edit { background:#007bff; color:#fff; border:none; padding:8px 10px; border-radius:6px; }
+button.delete { background:#dc3545; color:#fff; border:none; padding:8px 10px; border-radius:6px; }
+button.whatsapp { background:#25d366; color:#fff; border:none; padding:8px 10px; border-radius:6px; }
+button:hover { opacity: .92; }
 
-.cliente-card h3 {
-  color: #d4af37;
-  margin: 0 0 8px;
+footer { text-align:center; padding:16px; color:#888; font-size:.9rem; }
+
+/* Tabs */
+.tabs { display:flex; gap:8px; margin-bottom:12px; }
+.tab-btn {
+  background:#1a1a1d; color:#f8f8f8; border:1px solid #333;
+  padding:10px 14px; border-radius:10px; cursor:pointer;
 }
+.tab-btn.active { border-color:#d4af37; color:#d4af37; }
+.tab { display:none; }
+.tab.show { display:block; }
 
-.buttons {
-  margin-top: 10px;
+/* Admin lock */
+.lock { text-align:center; border:1px dashed #444; padding:20px; border-radius:12px; }
+.lock input { max-width:260px; }
+
+/* Associados chips */
+.assoc-box { grid-column: span 2; }
+.chips { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:8px; }
+.chip {
+  background:#2a2a2a; color:#eee; border:1px solid #444;
+  padding:6px 10px; border-radius:16px; display:flex; gap:6px; align-items:center;
 }
+.chip button { background:#dc3545; border:none; color:#fff; padding:2px 6px; border-radius:10px; cursor:pointer; font-size:12px; }
+.btn-mini { background:#0ea5e9; border:none; color:#fff; padding:8px 10px; border-radius:6px; }
 
-button.edit {
-  background-color: #007bff;
-  color: white;
-  margin-right: 5px;
-}
-
-button.delete {
-  background-color: #dc3545;
-  color: white;
-  margin-right: 5px;
-}
-
-button.whatsapp {
-  background-color: #25d366;
-  color: white;
-}
-
-button:hover {
-  opacity: 0.9;
-}
-
-footer {
-  text-align: center;
-  padding: 15px;
-  color: #888;
-  font-size: 0.9rem;
+/* Responsive */
+@media (max-width: 720px) {
+  .form-grid { grid-template-columns: 1fr; }
 }
