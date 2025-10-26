@@ -13,6 +13,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# --- Feriados nacionais e DF (exemplos; pode ampliar) ---
+FERIADOS_FIXOS = {(1,1),(4,21),(5,1),(9,7),(10,12),(11,2),(11,15),(12,25)}  # nacionais fixos (dia, mês)
+FERIADOS_MOVELS_POR_ANO = {}  # opcional (Carnaval, Páscoa, Corpus Christi etc.) — pode preencher depois
+FERIADOS_DF_FIXOS = {(4,21)}  # Fundação de Brasília (já nacional) e 11/30 (Dia do Evangélico-DF)
+FERIADOS_DF_DATAS = {(11,30)}  # Dia do Evangélico no DF
+
 # -------- Config GitHub persist --------
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", "").strip()
 GITHUB_OWNER = os.getenv("GITHUB_OWNER", "wellyanealmeida-sys").strip()
@@ -47,6 +53,48 @@ def dias_uteis_apos_vencimento(venc, hoje):
             dias += 1
         d += timedelta(days=1)
     return dias
+
+def eh_feriado(d):
+    # nacionais fixos
+    if (d.month, d.day) in FERIADOS_FIXOS:
+        return True
+    # DF fixos
+    if (d.month, d.day) in FERIADOS_DF_DATAS:
+        return True
+    # móveis por ano (se quiser popular futuramente)
+    if d.year in FERIADOS_MOVELS_POR_ANO and d in FERIADOS_MOVELS_POR_ANO[d.year]:
+        return True
+    return False
+
+def proximo_dia_util(d):
+    # avança se cair fim de semana/feriado
+    while d.weekday() >= 5 or eh_feriado(d):
+        d += timedelta(days=1)
+    return d
+
+def calcular_vencimentos(data_credito, limite=3):
+    """Gera até 3 vencimentos mensais (30 dias a partir do crédito), ajustados p/ dia útil."""
+    vencs = []
+    if not data_credito:
+        return vencs
+    d = data_credito
+    for _ in range(limite):
+        d = d + timedelta(days=30)
+        d = proximo_dia_util(d)
+        vencs.append(d)
+    return vencs
+
+def dias_uteis_entre(inicio_exclusive, fim_inclusive):
+    """Conta dias úteis no intervalo (inicio_exclusive, fim_inclusive]."""
+    if not inicio_exclusive or not fim_inclusive or fim_inclusive <= inicio_exclusive:
+        return 0
+    d = inicio_exclusive + timedelta(days=1)
+    n = 0
+    while d <= fim_inclusive:
+        if d.weekday() < 5 and not eh_feriado(d):
+            n += 1
+        d += timedelta(days=1)
+    return n
 
 # -------- Persistência: GitHub Contents API --------
 def gh_headers():
@@ -103,86 +151,72 @@ def _save(arr, message="Atualiza clientes.json"):
         f.write(txt)
 
 # -------- Validação / Cálculo --------
-def validar_cliente(cli: dict):
-    obrig = ["nome","valor_credito","data_credito","data_vencimento","juros_mensal","telefone"]
-    for c in obrig:
-        if str(cli.get(c,"")).strip() == "":
-            raise HTTPException(400, f"O campo '{c}' é obrigatório.")
-
-    tel = cli.get("telefone","").replace("+","").replace(" ","").replace("-","")
-    if not tel.isdigit() or len(tel) < 10:
-        raise HTTPException(400, "Telefone inválido. Use 5561XXXXXXXX.")
-    cli["telefone"] = tel
-
-    try:
-        cli["valor_credito"] = float(cli["valor_credito"])
-        cli["juros_mensal"]  = float(cli["juros_mensal"])  # %
-    except Exception:
-        raise HTTPException(400, "valor_credito/juros_mensal inválidos.")
-
-    # Juros diário em R$/dia útil (compat aceita 'juros_diario')
-    jd_val = cli.get("juros_diario_valor", cli.get("juros_diario", 0))
-    try:
-        cli["juros_diario_valor"] = float(jd_val or 0.0)
-    except Exception:
-        raise HTTPException(400, "juros_diario_valor inválido (R$ por dia útil).")
-
-    # Datas
-    dc = parse_date(cli.get("data_credito"))
-    dv = parse_date(cli.get("data_vencimento"))
-    if not dc or not dv:
-        raise HTTPException(400, "Datas inválidas. Use YYYY-MM-DD ou DD/MM/YYYY.")
-    cli["data_credito"] = dc.strftime("%Y-%m-%d")
-    cli["data_vencimento"] = dv.strftime("%Y-%m-%d")
-
-    # Normaliza associados: lista de strings
-    assoc = cli.get("associados", [])
-    if isinstance(assoc, str):
-        assoc = [s.strip() for s in assoc.split(",") if s.strip()]
-    elif isinstance(assoc, list):
-        assoc = [str(s).strip() for s in assoc if str(s).strip()]
-    else:
-        assoc = []
-    cli["associados"] = assoc
-
-    status = (cli.get("status") or "ativo").lower().strip()
-    cli["status"] = "quitado" if status == "quitado" else "ativo"
-
-    # mantém último envio se vier
-    if "ultimo_envio" in cli and cli["ultimo_envio"]:
-        try:
-            datetime.fromisoformat(cli["ultimo_envio"])
-        except Exception:
-            cli["ultimo_envio"] = None
-    else:
-        cli["ultimo_envio"] = cli.get("ultimo_envio", None)
-
-    return cli
-
 def calcular_valores(cli: dict):
     valor_credito = float(cli.get("valor_credito", 0) or 0)
     juros_mensal  = float(cli.get("juros_mensal", 0) or 0)              # %
     jd_r          = float(cli.get("juros_diario_valor", 0) or 0)        # R$/dia útil
 
-    venc = parse_date(cli.get("data_vencimento"))
+    dc = parse_date(cli.get("data_credito"))
+    dv = parse_date(cli.get("data_vencimento"))  # pode vir preenchido; se faltar, calculamos
     hoje = datetime.now().date()
 
-    juros_mensal_valor = valor_credito * (juros_mensal / 100.0)
+    # 1) Vencimentos inteligentes (até 3 ciclos)
+    vencs = calcular_vencimentos(dc, limite=3)
+    # Se o cliente preencheu manualmente o 1º vencimento, honramos; ajusta p/ útil:
+    if dv:
+        vencs[0] = proximo_dia_util(dv)
 
-    dias_atraso = 0
+    # 2) Acúmulo progressivo: aplica juro mensal na virada de cada vencimento ultrapassado
+    # e soma juros diários (R$ fixo) por dias úteis em cada intervalo após cada vencimento.
+    valor_base = valor_credito
+    juros_mensal_total = 0.0
     juros_diario_total = 0.0
-    if cli.get("status","ativo") == "ativo":
-        dias_atraso = dias_uteis_apos_vencimento(venc, hoje)
-        juros_diario_total = jd_r * dias_atraso
+    dias_uteis_total = 0
+    meses_atraso = 0
 
-    valor_total = round(valor_credito + juros_mensal_valor + juros_diario_total, 2)
+    # iteramos cada ciclo: [v1, v2, v3]
+    anterior = dc
+    for idx, v in enumerate(vencs, start=1):
+        # se ainda não chegou no 1º vencimento, não há atraso
+        if hoje <= v:
+            break
 
-    cli["juros_mensal_valor"] = round(juros_mensal_valor, 2)
+        # no dia do vencimento, aplica juro mensal sobre a base até então
+        jm_val = valor_base * (juros_mensal / 100.0)
+        juros_mensal_total += jm_val
+        valor_base += jm_val  # base cresce com juro mensal do ciclo
+
+        # dias úteis de atraso deste ciclo: (v, hoje] ou até o próximo vencimento, se não chegou nele ainda
+        # se já passou para o próximo ciclo, só conta até o próximo vencimento; senão, até hoje
+        fim_ciclo = min(hoje, vencs[idx] if idx < len(vencs) else hoje)
+        du = dias_uteis_entre(v, fim_ciclo)
+        dias_uteis_total += du
+        juros_diario_total += jd_r * du
+
+        # se hoje já passou deste vencimento, consideramos 1 mês de atraso concluído
+        if hoje > v:
+            meses_atraso += 1
+
+    # 3) Valor total
+    valor_total = round(valor_base + juros_diario_total, 2)
+
+    # 4) Status especial: 3 meses → inadimplente
+    status_atual = cli.get("status", "ativo")
+    if meses_atraso >= 3:
+        status_atual = "inadimplente"
+
+    # 5) Seta campos de exibição
+    cli["juros_mensal_valor"] = round(juros_mensal_total, 2)
     cli["juros_diario_valor_dia"] = round(jd_r, 2)
     cli["juros_diario_total"] = round(juros_diario_total, 2)
-    cli["dias_uteis_atraso"] = dias_atraso
+    cli["dias_uteis_atraso"] = dias_uteis_total
     cli["valor_total"] = valor_total
+    cli["status"] = status_atual
+    cli["vencimentos"] = [d.strftime("%Y-%m-%d") for d in vencs]
+    # Para exibição "atual": usamos o vencimento mais próximo ainda não alcançado, ou o último
+    cli["vencimento_atual"] = next((d for d in vencs if hoje <= parse_date(d)), vencs[-1]).strftime("%Y-%m-%d") if vencs else cli.get("data_vencimento")
     return cli
+
 
 # -------- Rotas --------
 @app.get("/")
