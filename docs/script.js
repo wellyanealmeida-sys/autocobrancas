@@ -74,37 +74,64 @@ function renderCobrancas() {
   const termo = (qs("busca")?.value || "").toLowerCase().trim();
   const ativos = cache.filter(c => (c.status || "ativo")==="ativo" && c.nome.toLowerCase().includes(termo));
   const quitados = cache.filter(c => (c.status || "ativo")==="quitado" && c.nome.toLowerCase().includes(termo));
-  renderLista(ativos, qs("lista-ativos"), true);
-  renderLista(quitados, qs("lista-quitados"), false);
+  const inad = cache.filter(c => (c.status || "ativo")==="inadimplente" && c.nome.toLowerCase().includes(termo));
+  renderLista(ativos, qs("lista-ativos"), "ativo");
+  renderLista(quitados, qs("lista-quitados"), "quitado");
+  renderLista(inad, qs("lista-inad"), "inad");
 }
 
-function cardHTML(c, idx, isAtivo) {
+function cardHTML(c, idx, tipo) {
   const mensal = `${(c.juros_mensal ?? 0)}% → R$ ${(c.juros_mensal_valor ?? 0).toFixed(2)}`;
-  const diario = `R$ ${(c.juros_diario_valor_dia ?? 0).toFixed(2)} × ${(c.dias_uteis_atraso ?? 0)} dias úteis → R$ ${(c.juros_diario_total ?? 0).toFixed(2)}`;
+  const diario = `R$ ${(c.juros_diario_valor_dia ?? 0).toFixed(2)} × ${(c.dias_uteis_atraso ?? 0)} dias úteis (R$ ${(c.juros_diario_total ?? 0).toFixed(2)})`;
+  const cls = tipo === "inad" ? "cliente-card inad" : "cliente-card";
+  const vencRef = c.vencimento_atual || c.data_vencimento || "-";
+
+  // Botões por tipo
+  const btnsAtivo = `
+    <button class="whatsapp" onclick="enviarWhatsapp(${idx})">💬 WhatsApp</button>
+    <button class="edit" onclick="editarCliente(${idx})">✏️ Editar</button>
+    <button class="edit" style="background:#8b5cf6" onclick="quitar(${idx})">💰 Quitar</button>
+    <button class="edit" style="background:#0ea5e9" onclick="duplicar(${idx})">📋 Duplicar</button>
+    <button class="edit" style="background:#6b7280" onclick="gerarRecibo(${idx})">📄 Recibo</button>
+    <button class="delete" onclick="excluirCliente(${idx})">❌ Excluir</button>
+  `;
+  const btnsQuit = `
+    <button class="edit" onclick="reativar(${idx})">♻️ Reativar</button>
+    <button class="edit" style="background:#0ea5e9" onclick="duplicar(${idx})">📋 Duplicar</button>
+    <button class="edit" style="background:#6b7280" onclick="gerarRecibo(${idx})">📄 Recibo</button>
+    <button class="delete" onclick="excluirCliente(${idx})">❌ Excluir</button>
+  `;
+  const btnsInad = `
+    <span class="note-inad">⚠️ Inadimplente há 3 meses — envio automático desativado.</span><br/>
+    <button class="edit" onclick="editarCliente(${idx})">✏️ Editar</button>
+    <button class="edit" style="background:#0ea5e9" onclick="duplicar(${idx})">📋 Duplicar</button>
+    <button class="edit" style="background:#6b7280" onclick="gerarRecibo(${idx})">📄 Recibo</button>
+    <button class="edit" onclick="reativar(${idx})">♻️ Mover p/ Ativos</button>
+    <button class="delete" onclick="excluirCliente(${idx})">❌ Excluir</button>
+  `;
+
   return `
-    <div class="cliente-card">
-      <h3>${c.nome} ${!isAtivo ? '<span style="color:#25d366;font-size:12px;">(quitado)</span>' : ''}</h3>
+    <div class="${cls}">
+      <h3>${c.nome}${tipo==="inad" ? ' <span class="badge-inad">INADIMPLENTE</span>' : (tipo==="quitado" ? ' <span class="badge" style="background:#25d366;color:#fff;padding:2px 8px;border-radius:10px;font-size:12px;">QUITADO</span>' : '')}</h3>
       <p><b>Valor Crédito:</b> R$ ${(c.valor_credito ?? 0).toFixed(2)}</p>
-      <p><b>Data Vencimento:</b> ${c.data_vencimento || "-"}</p>
+      <p><b>Data de Vencimento:</b> ${vencRef}</p>
       <p><b>Juros Mensal:</b> ${mensal}</p>
       <p><b>Juros Diário:</b> ${diario}</p>
       <p><b>Valor Atualizado:</b> <b style="color:#d4af37">R$ ${(c.valor_total ?? 0).toFixed(2)}</b></p>
       <p style="color:#9aa; font-size:12px;"><b>Último envio:</b> ${fmtDataHora(c.ultimo_envio)}</p>
       <div class="buttons">
-        ${isAtivo ? `<button class="whatsapp" onclick="enviarWhatsapp(${idx})">💬 WhatsApp</button>` : ""}
-        ${isAtivo ? `<button class="edit" onclick="editarCliente(${idx})">✏️ Editar</button>` : ""}
-        <button class="delete" onclick="excluirCliente(${idx})">❌ Excluir</button>
-        ${isAtivo
-          ? `<button class="edit" style="background:#8b5cf6" onclick="quitar(${idx})">💰 Quitar</button>`
-          : `<button class="edit" style="background:#0ea5e9" onclick="reativar(${idx})">♻️ Reativar</button>`}
+        ${tipo==="ativo" ? btnsAtivo : (tipo==="quitado" ? btnsQuit : btnsInad)}
       </div>
-    </div>`;
+    </div>
+  `;
 }
 
-function renderLista(arr, el, isAtivo) {
+function renderLista(arr, el, tipo) {
   el.innerHTML = arr.map(c => {
-    const idx = cache.findIndex(k => k.nome===c.nome && k.data_credito===c.data_credito && k.data_vencimento===c.data_vencimento);
-    return cardHTML(c, idx, isAtivo);
+    const idx = cache.findIndex(k =>
+      k.nome===c.nome && k.data_credito===c.data_credito && k.data_vencimento===c.data_vencimento
+    );
+    return cardHTML(c, idx, tipo);
   }).join("") || `<div class="cliente-card"><p>Nenhum cliente encontrado.</p></div>`;
 }
 
@@ -278,6 +305,40 @@ function exportarCSV() {
   a.download = "clientes.csv";
   a.click();
   URL.revokeObjectURL(a.href);
+}
+
+async function duplicar(i) {
+  if (!confirm("Duplicar este cadastro como nova operação?")) return;
+  const res = await fetch(`${API_BASE}/clientes`);
+  const clientes = await res.json();
+  const c = clientes[i];
+
+  const payload = {
+    ...c,
+    data_credito: new Date().toISOString().slice(0,10),
+    status: "ativo",
+    ultimo_envio: null
+  };
+  // limpa campos que o backend recalcula
+  delete payload.valor_total;
+  delete payload.juros_mensal_valor;
+  delete payload.juros_diario_valor_dia;
+  delete payload.juros_diario_total;
+  delete payload.dias_uteis_atraso;
+  delete payload.vencimentos;
+  delete payload.vencimento_atual;
+
+  await fetch(`${API_BASE}/cadastrar`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+  alert("Cadastro duplicado como nova operação.");
+  carregarClientes();
+}
+
+function gerarRecibo(i) {
+  alert("Recibo PDF será gerado (jsPDF) na próxima etapa — envio manual.");
 }
 
 // ---------- Eventos ----------
