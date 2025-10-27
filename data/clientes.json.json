@@ -1,0 +1,9 @@
+[
+  {
+    "nome": "Cliente Teste",
+    "valor_base": 100,
+    "juros_diario": 0.5,
+    "data_credito": "2025-10-20",
+    "telefone": "5561981447471"
+  }
+]
