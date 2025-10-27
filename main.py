@@ -14,10 +14,6 @@ app.add_middleware(
 
 DATA_FILE = "data/clientes.json"
 
-# =====================================================
-# 🔹 FUNÇÕES DE SUPORTE
-# =====================================================
-
 def parse_date(s):
     try:
         return datetime.strptime(s, "%Y-%m-%d").date()
@@ -38,19 +34,33 @@ def save_clientes(lst):
     with open(DATA_FILE, "w", encoding="utf-8") as f:
         json.dump(lst, f, ensure_ascii=False, indent=2)
 
-# =====================================================
-# 🔹 FERIADOS (NACIONAIS + DF)
-# =====================================================
+# FERIADOS (fixos + DF + móveis)
+FERIADOS_FIXOS = {(1,1),(4,21),(5,1),(9,7),(10,12),(11,2),(11,15),(12,25)}
+FERIADOS_DF_FIXOS = {(4,21),(11,30)}
 
-FERIADOS_FIXOS = {
-    (1,1), (4,21), (5,1), (9,7), (10,12), (11,2), (11,15), (12,25)
-}
-FERIADOS_DF_DATAS = {
-    (11,30)  # Dia do Evangélico - DF
-}
+def calcular_feriados_moveis(ano):
+    # Gauss
+    a = ano % 19
+    b = ano // 100
+    c = ano % 100
+    d = b // 4
+    e = b % 4
+    f = (b + 8) // 25
+    g = (b - f + 1) // 3
+    h = (19 * a + b - d - g + 15) % 30
+    i = c // 4
+    k = c % 4
+    l = (32 + 2 * e + 2 * i - h - k) % 7
+    m = (a + 11 * h + 22 * l) // 451
+    mes = (h + l - 7 * m + 114) // 31
+    dia = ((h + l - 7 * m + 114) % 31) + 1
+    pascoa = date(ano, mes, dia)
+    return {pascoa - timedelta(days=47), pascoa - timedelta(days=2), pascoa + timedelta(days=60)}
 
 def eh_feriado(d: date):
-    if (d.month, d.day) in FERIADOS_FIXOS or (d.month, d.day) in FERIADOS_DF_DATAS:
+    if (d.month, d.day) in FERIADOS_FIXOS or (d.month, d.day) in FERIADOS_DF_FIXOS:
+        return True
+    if d in calcular_feriados_moveis(d.year):
         return True
     return False
 
@@ -80,23 +90,17 @@ def calcular_vencimentos(data_credito, limite=3):
         vencs.append(d)
     return vencs
 
-# =====================================================
-# 🔹 VALIDAÇÃO DE CLIENTE
-# =====================================================
-
 def validar_cliente(cli: dict):
     obrig = ["nome", "valor_credito", "juros_mensal", "telefone"]
     for c in obrig:
         if str(cli.get(c, "")).strip() == "":
             raise HTTPException(400, f"O campo '{c}' é obrigatório.")
 
-    # Telefone
     tel = cli.get("telefone", "").replace("+", "").replace(" ", "").replace("-", "")
     if not tel.isdigit() or len(tel) < 10:
         raise HTTPException(400, "Telefone inválido. Use 5561XXXXXXXX.")
     cli["telefone"] = tel
 
-    # Conversões numéricas
     try:
         cli["valor_credito"] = float(cli["valor_credito"])
         cli["juros_mensal"] = float(cli["juros_mensal"])
@@ -107,9 +111,8 @@ def validar_cliente(cli: dict):
     try:
         cli["juros_diario_valor"] = float(jd_val or 0.0)
     except Exception:
-        raise HTTPException(400, "Juros diário inválido (use apenas números).")
+        raise HTTPException(400, "Juros diário inválido (use apenas números)." )
 
-    # Datas
     dc = parse_date(cli.get("data_credito"))
     if not dc:
         dc = datetime.now().date()
@@ -123,7 +126,6 @@ def validar_cliente(cli: dict):
         dv = proximo_dia_util(dv)
         cli["data_vencimento"] = dv.strftime("%Y-%m-%d")
 
-    # Associados
     assoc = cli.get("associados", [])
     if isinstance(assoc, str):
         assoc = [s.strip() for s in assoc.split(",") if s.strip()]
@@ -133,13 +135,11 @@ def validar_cliente(cli: dict):
         assoc = []
     cli["associados"] = assoc
 
-    # Status
     status = (cli.get("status") or "ativo").lower().strip()
     if status not in ["ativo", "quitado", "inadimplente"]:
         status = "ativo"
     cli["status"] = status
 
-    # Último envio
     if "ultimo_envio" in cli and cli["ultimo_envio"]:
         try:
             datetime.fromisoformat(cli["ultimo_envio"])
@@ -149,10 +149,6 @@ def validar_cliente(cli: dict):
         cli["ultimo_envio"] = None
 
     return cli
-
-# =====================================================
-# 🔹 CÁLCULO DE JUROS E STATUS
-# =====================================================
 
 def calcular_valores(cli: dict):
     valor_credito = float(cli.get("valor_credito", 0) or 0)
@@ -200,10 +196,6 @@ def calcular_valores(cli: dict):
     cli["vencimentos"] = [d.strftime("%Y-%m-%d") for d in vencs]
     cli["vencimento_atual"] = next((d for d in vencs if hoje <= d), vencs[-1]).strftime("%Y-%m-%d") if vencs else cli.get("data_vencimento")
     return cli
-
-# =====================================================
-# 🔹 ROTAS FASTAPI
-# =====================================================
 
 @app.get("/clientes")
 def listar_clientes():
@@ -257,10 +249,6 @@ def excluir_cliente(i: int):
     del lst[i]
     save_clientes(lst)
     return {"ok": True}
-
-# =====================================================
-# 🔹 ROTA TESTE RAIZ
-# =====================================================
 
 @app.get("/")
 def root():
