@@ -157,8 +157,17 @@ def calcular_valores(cli: dict):
     jd_r          = float(cli.get("juros_diario_valor", 0) or 0)        # R$/dia útil
 
     dc = parse_date(cli.get("data_credito"))
+    if not dc:
+    dc = datetime.now().date()
+    cli["data_credito"] = dc.strftime("%Y-%m-%d")
+
     dv = parse_date(cli.get("data_vencimento"))  # pode vir preenchido; se faltar, calculamos
     hoje = datetime.now().date()
+    if not dv and dc:
+    # gera o 1º vencimento automático (30 dias úteis à frente)
+    dv = proximo_dia_util(dc + timedelta(days=30))
+    cli["data_vencimento"] = dv.strftime("%Y-%m-%d")
+
 
     # 1) Vencimentos inteligentes (até 3 ciclos)
     vencs = calcular_vencimentos(dc, limite=3)
