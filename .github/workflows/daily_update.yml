@@ -1,30 +1,36 @@
 name: Atualizar cobranças diárias
 
 on:
+  # 🔁 Executa automaticamente todos os dias às 09:00 da manhã (horário de Brasília)
   schedule:
-    - cron: "0 3 * * *"
+    - cron: "0 12 * * *"  # 09:00 horário de Brasília (UTC-3)
+  # ▶️ Permite rodar manualmente pelo botão "Run workflow"
   workflow_dispatch:
 
 jobs:
   update:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout código
-        uses: actions/checkout@v4
-      - name: Configurar Python
-        uses: actions/setup-python@v5
+      - name: 📥 Checkout código
+        uses: actions/checkout@v3
+
+      - name: ⚙️ Configurar Python
+        uses: actions/setup-python@v4
         with:
-          python-version: "3.11"
-      - name: Install dependencies
+          python-version: 3.11
+
+      - name: 📦 Instalar dependências
         run: pip install -r requirements.txt
-      - name: Rodar atualização
+
+      - name: 🚀 Rodar atualização
         run: |
-          pip install --upgrade pip
           python main.py
-      - name: Commit e push
+
+      - name: ✅ Commit e push (atualizações de clientes)
         run: |
-          git config user.name "github-actions"
-          git config user.email "actions@github.com"
-          git add data/clientes.json
-          git commit -m "Atualização automática diária"
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/clientes.json || true
+          git commit -m "Atualização automática de cobranças diárias" || echo "Sem alterações a commitar"
           git push
