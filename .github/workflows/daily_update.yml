@@ -1,10 +1,8 @@
 name: Atualizar cobranças diárias
 
 on:
-  # 🔁 Executa automaticamente todos os dias às 09:00 da manhã (horário de Brasília)
   schedule:
     - cron: "0 12 * * *"  # 09:00 horário de Brasília (UTC-3)
-  # ▶️ Permite rodar manualmente pelo botão "Run workflow"
   workflow_dispatch:
 
 jobs:
@@ -23,11 +21,10 @@ jobs:
       - name: 📦 Instalar dependências
         run: pip install -r requirements.txt
 
-      - name: 🚀 Rodar atualização
-        run: |
-          python main.py
+      - name: 🚀 Rodar atualização de juros
+        run: python main.py
 
-      - name: ✅ Commit e push (atualizações de clientes)
+      - name: ✅ Commit e push (atualização de clientes)
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
