@@ -1,348 +1,232 @@
+<script>
 const API_BASE = "https://autocobrancas.onrender.com";
 const PIX_KEY = "dcb448d4-2b4b-4f25-9097-95d800d3638a";
-const ADMIN_PASS = "lw2025";
+const CNPJ_PIX = "59014280000130";
 
-let editIndex = null;
-let cache = [];
-let associadosArray = [];
+let CLIENTES_CACHE = [];
 
-// ---------- Utils ----------
-function qs(id) { return document.getElementById(id); }
-function fmtDataHora(iso) {
-  if (!iso) return "-";
-  try { return new Date(iso).toLocaleString("pt-BR"); } catch { return "-"; }
+// Formata dinheiro em R$
+function money(n){
+  return (Number(n||0)).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
 }
 
-// ---------- Abas ----------
-document.querySelectorAll(".tab-btn").forEach(btn => {
-  btn.addEventListener("click", () => {
-    document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
-    btn.classList.add("active");
-    const tab = btn.getAttribute("data-tab");
-    document.querySelectorAll(".tab").forEach(t => t.classList.remove("show"));
-    qs(tab).classList.add("show");
-    if (tab === "tab-detalhes") {
-      // conteúdo admin bloqueado
-      if (qs("admin-content").style.display !== "block") {
-        // aguarda senha
-      } else {
-        renderAdmin();
-      }
-    }
-  });
-});
-
-function unlockAdmin() {
-  const p = qs("admin-pass").value.trim();
-  if (p === ADMIN_PASS) {
-    qs("admin-lock").style.display = "none";
-    qs("admin-content").style.display = "block";
-    renderAdmin();
-  } else {
-    alert("Senha incorreta.");
-  }
+// Converte "YYYY-MM-DD" para "DD/MM/YYYY"
+function formatDateBr(iso){
+  if(!iso) return "-";
+  const [y,m,d] = iso.split("-");
+  return `${d}/${m}/${y}`;
 }
 
-// ---------- Associados (chips) ----------
-function refreshAssociadosChips() {
-  const box = qs("associados-chips");
-  box.innerHTML = associadosArray.map((n, idx) => `
-    <span class="chip">${n} <button type="button" onclick="removeAssociado(${idx})">x</button></span>
-  `).join("");
-}
-function addAssociado() {
-  const val = qs("assoc-input").value.trim();
-  if (!val) return;
-  associadosArray.push(val);
-  qs("assoc-input").value = "";
-  refreshAssociadosChips();
-}
-function removeAssociado(i) {
-  associadosArray.splice(i,1);
-  refreshAssociadosChips();
+// Hoje em formato YYYY-MM-DD
+function hojeISO(){
+  return new Date().toISOString().slice(0,10);
 }
 
-// ---------- Carregar / Renderizar ----------
-async function carregarClientes() {
-  const res = await fetch(`${API_BASE}/clientes`);
-  cache = await res.json();
-  renderCobrancas();
-  if (qs("admin-content").style.display === "block") renderAdmin();
+// Pega o ciclo atual (do vencimento_atual) ou o último
+function cicloAtual(cli){
+  const ciclos = cli.ciclos || [];
+  if(!ciclos.length) return null;
+  const atual = ciclos.find(ci => ci.vencimento === cli.vencimento_atual);
+  return atual || ciclos[ciclos.length-1];
 }
 
-function renderCobrancas() {
-  const termo = (qs("busca")?.value || "").toLowerCase().trim();
-  const ativos = cache.filter(c => (c.status || "ativo")==="ativo" && c.nome.toLowerCase().includes(termo));
-  const quitados = cache.filter(c => (c.status || "ativo")==="quitado" && c.nome.toLowerCase().includes(termo));
-  const inad = cache.filter(c => (c.status || "ativo")==="inadimplente" && c.nome.toLowerCase().includes(termo));
-  renderLista(ativos, qs("lista-ativos"), "ativo");
-  renderLista(quitados, qs("lista-quitados"), "quitado");
-  renderLista(inad, qs("lista-inad"), "inad");
+// Carrega clientes da API e atualiza tela
+async function load(){
+  const r = await fetch(API_BASE + '/clientes');
+  const arr = await r.json();
+  CLIENTES_CACHE = arr;
+  document.getElementById('lista').innerHTML =
+    arr.map((c,i)=>card(c,i)).join('') || '<p>Nenhum cliente.</p>';
+  renderAssociados();
 }
 
-function cardHTML(c, idx, tipo) {
-  const mensal = `${(c.juros_mensal ?? 0)}% → R$ ${(c.juros_mensal_valor ?? 0).toFixed(2)}`;
-  const diario = `R$ ${(c.juros_diario_valor_dia ?? 0).toFixed(2)} × ${(c.dias_uteis_atraso ?? 0)} dias úteis (R$ ${(c.juros_diario_total ?? 0).toFixed(2)})`;
-  const cls = tipo === "inad" ? "cliente-card inad" : "cliente-card";
-  const vencRef = c.vencimento_atual || c.data_vencimento || "-";
+// Monta o card de cada cliente
+function card(c,i){
+  const atual = cicloAtual(c);
+  const podeEnviarHoje = c.vencimento_atual === hojeISO() && (c.status || 'ativo') === 'ativo';
 
-  // Botões por tipo
-  const btnsAtivo = `
-    <button class="whatsapp" onclick="enviarWhatsapp(${idx})">💬 WhatsApp</button>
-    <button class="edit" onclick="editarCliente(${idx})">✏️ Editar</button>
-    <button class="edit" style="background:#8b5cf6" onclick="quitar(${idx})">💰 Quitar</button>
-    <button class="edit" style="background:#0ea5e9" onclick="duplicar(${idx})">📋 Duplicar</button>
-    <button class="edit" style="background:#6b7280" onclick="gerarRecibo(${idx})">📄 Recibo</button>
-    <button class="delete" onclick="excluirCliente(${idx})">❌ Excluir</button>
-  `;
-  const btnsQuit = `
-    <button class="edit" onclick="reativar(${idx})">♻️ Reativar</button>
-    <button class="edit" style="background:#0ea5e9" onclick="duplicar(${idx})">📋 Duplicar</button>
-    <button class="edit" style="background:#6b7280" onclick="gerarRecibo(${idx})">📄 Recibo</button>
-    <button class="delete" onclick="excluirCliente(${idx})">❌ Excluir</button>
-  `;
-  const btnsInad = `
-    <span class="note-inad">⚠️ Inadimplente há 3 meses — envio automático desativado.</span><br/>
-    <button class="edit" onclick="editarCliente(${idx})">✏️ Editar</button>
-    <button class="edit" style="background:#0ea5e9" onclick="duplicar(${idx})">📋 Duplicar</button>
-    <button class="edit" style="background:#6b7280" onclick="gerarRecibo(${idx})">📄 Recibo</button>
-    <button class="edit" onclick="reativar(${idx})">♻️ Mover p/ Ativos</button>
-    <button class="delete" onclick="excluirCliente(${idx})">❌ Excluir</button>
-  `;
+  const linhas = (c.ciclos || []).map(ci => `
+    <li>
+      • Vencimento: ${formatDateBr(ci.vencimento)}<br>
+      &nbsp;&nbsp; Juros do mês: ${money(ci.juros_mensal_valor)}<br>
+      &nbsp;&nbsp; Juros diário total (${ci.dias_uteis} dias úteis): ${money(ci.juros_diario_total)}<br>
+      &nbsp;&nbsp; Valor atualizado: <b>${money(ci.valor_atualizado)}</b>
+    </li>
+  `).join('');
 
   return `
-    <div class="${cls}">
-      <h3>${c.nome}${tipo==="inad" ? ' <span class="badge-inad">INADIMPLENTE</span>' : (tipo==="quitado" ? ' <span class="badge" style="background:#25d366;color:#fff;padding:2px 8px;border-radius:10px;font-size:12px;">QUITADO</span>' : '')}</h3>
-      <p><b>Valor Crédito:</b> R$ ${(c.valor_credito ?? 0).toFixed(2)}</p>
-      <p><b>Data de Vencimento:</b> ${vencRef}</p>
-      <p><b>Juros Mensal:</b> ${mensal}</p>
-      <p><b>Juros Diário:</b> ${diario}</p>
-      <p><b>Valor Atualizado:</b> <b style="color:#d4af37">R$ ${(c.valor_total ?? 0).toFixed(2)}</b></p>
-      <p style="color:#9aa; font-size:12px;"><b>Último envio:</b> ${fmtDataHora(c.ultimo_envio)}</p>
-      <div class="buttons">
-        ${tipo==="ativo" ? btnsAtivo : (tipo==="quitado" ? btnsQuit : btnsInad)}
+    <div class='cli'>
+      <h3>${c.nome} <small>(${c.status})</small></h3>
+      <p><b>Telefone:</b> ${c.telefone}</p>
+      <p><b>Valor Crédito:</b> ${money(c.valor_credito)}</p>
+      <p><b>Vencimento atual:</b> ${formatDateBr(c.vencimento_atual || c.data_vencimento)}</p>
+      ${c.objeto ? `<p><b>Objeto em garantia:</b> ${c.objeto}</p>` : ""}
+      ${c.associados && c.associados.length ? `<p><b>Associados:</b> ${c.associados.join(", ")}</p>` : ""}
+      ${atual ? `<p><b>Valor para pagamento (hoje):</b> ${money(atual.valor_atualizado)}</p>` : ""}
+      <details><summary>Detalhes dos ciclos</summary><ul>${linhas}</ul></details>
+      <div class='acoes'>
+        <button class='btn' onclick='editar(${i})'>✏️ Editar</button>
+        <button class='btn' onclick='zap(${i})' ${podeEnviarHoje ? "" : "disabled title='Só libera no dia do vencimento atual'"}>💬 WhatsApp</button>
       </div>
     </div>
   `;
 }
 
-function renderLista(arr, el, tipo) {
-  el.innerHTML = arr.map(c => {
-    const idx = cache.findIndex(k =>
-      k.nome===c.nome && k.data_credito===c.data_credito && k.data_vencimento===c.data_vencimento
-    );
-    return cardHTML(c, idx, tipo);
-  }).join("") || `<div class="cliente-card"><p>Nenhum cliente encontrado.</p></div>`;
+// Monta mensagem de WhatsApp (sem valor de crédito, com CNPJ)
+async function zap(i){
+  const c = CLIENTES_CACHE[i];
+  if(!c) return;
+
+  const atual = cicloAtual(c);
+  const valorHoje = atual ? atual.valor_atualizado : c.valor_credito;
+  const dataVenc = formatDateBr(c.vencimento_atual || (atual && atual.vencimento) || c.data_vencimento);
+
+  let msg = `Olá ${c.nome}, tudo bem?\\n\\n`;
+  msg += `Aqui é da LW Mútuo Mercantil.\\n\\n`;
+  msg += `Estamos lembrando que hoje, dia ${dataVenc}, vence o pagamento referente ao seu contrato.`;
+  if (c.objeto) {
+    msg += ` Objeto em garantia: ${c.objeto}.`;
+  }
+  msg += `\\n\\n`;
+  msg += `Valor para pagamento hoje (com juros do mês e juros diário conforme combinado): ${money(valorHoje)}.\\n\\n`;
+  msg += `Chaves PIX para pagamento:\\n`;
+  msg += `• Chave padrão: ${PIX_KEY}\\n`;
+  msg += `• CNPJ: ${CNPJ_PIX}\\n\\n`;
+  msg += `Após o pagamento, por favor envie o comprovante neste número para atualização do sistema.\\n\\n`;
+  msg += `Qualquer dúvida, estamos à disposição.`;
+
+  const url = `https://wa.me/${c.telefone}?text=${encodeURIComponent(msg)}`;
+  window.open(url, '_blank');
 }
 
-// ---------- Admin Detalhes ----------
-function renderAdmin() {
-  const termo = (qs("busca-admin")?.value || "").toLowerCase().trim();
-  const arr = cache.filter(c => c.nome.toLowerCase().includes(termo));
-  qs("lista-admin").innerHTML = arr.map(c => `
-    <div class="cliente-card">
-      <h3>${c.nome} <span style="font-size:12px;color:#aaa;">(${c.status || "ativo"})</span></h3>
-      <p><b>Telefone:</b> ${c.telefone || "-"}</p>
-      <p><b>Valor Crédito:</b> R$ ${(c.valor_credito ?? 0).toFixed(2)}</p>
-      <p><b>Data Crédito:</b> ${c.data_credito || "-"}</p>
-      <p><b>Data Vencimento:</b> ${c.data_vencimento || "-"}</p>
-      <p><b>Juros Mensal (%):</b> ${c.juros_mensal ?? 0}</p>
-      <p><b>Juros Diário (R$/dia útil):</b> ${c.juros_diario_valor_dia?.toFixed(2) ?? (c.juros_diario_valor ?? 0).toFixed?.(2) ?? c.juros_diario_valor}</p>
-      <p><b>Objeto de Empenho:</b> ${c.objeto_empenho || "-"}</p>
-      <p><b>Documento / Procuração:</b> ${c.documento || "-"}</p>
-      <p><b>Associados:</b> ${(Array.isArray(c.associados) ? c.associados.join(", ") : (c.associados || "")) || "-"}</p>
-      <p><b>Último envio:</b> ${fmtDataHora(c.ultimo_envio)}</p>
-      <p><b>Valor Atualizado (info):</b> R$ ${(c.valor_total ?? 0).toFixed(2)}</p>
-    </div>
-  `).join("") || `<div class="cliente-card"><p>Nenhum cliente encontrado.</p></div>`;
+// Preenche formulário para edição
+function editar(i){
+  const c = CLIENTES_CACHE[i];
+  if(!c) return;
+  const f = document.getElementById('form');
+  f.dataset.index = i;
+  f.nome.value = c.nome || "";
+  f.telefone.value = c.telefone || "";
+  f.valor_credito.value = c.valor_credito || "";
+  f.data_credito.value = (c.data_credito || "").slice(0,10);
+  f.data_vencimento.value = (c.data_vencimento || c.vencimento_atual || "").slice(0,10);
+  f.juros_mensal.value = c.juros_mensal || "";
+  f.juros_diario.value = c.juros_diario_valor || c.juros_diario || "";
+  f.objeto.value = c.objeto || "";
+  f.associados.value = (c.associados || []).join(", ");
+  f.nome.focus();
 }
 
-// Busca
-["busca","busca-admin"].forEach(id => {
-  const el = document.getElementById(id);
-  if (el) el.addEventListener("input", () => {
-    if (id==="busca") renderCobrancas(); else renderAdmin();
+// --------- GUIA DE ASSOCIADOS ---------
+
+function coletarAssociadosLista(){
+  const linhas = [];
+  CLIENTES_CACHE.forEach(c => {
+    (c.associados || []).forEach(a => {
+      linhas.push({
+        associado: a,
+        cliente: c.nome,
+        telefone: c.telefone,
+        status: c.status || 'ativo',
+        vencimento_atual: formatDateBr(c.vencimento_atual || c.data_vencimento)
+      });
+    });
   });
-});
+  return linhas;
+}
 
-// ---------- Salvar / Editar ----------
-async function salvarCliente(ev) {
-  ev.preventDefault();
+function renderAssociados(){
+  const cont = document.getElementById('associados');
+  if(!cont) return;
+  const linhas = coletarAssociadosLista();
+  if(!linhas.length){
+    cont.innerHTML = "<p>Nenhum associado cadastrado.</p>";
+    return;
+  }
+  const rowsHtml = linhas.map(l => `
+    <tr>
+      <td>${l.associado}</td>
+      <td>${l.cliente}</td>
+      <td>${l.telefone}</td>
+      <td>${l.status}</td>
+      <td>${l.vencimento_atual}</td>
+    </tr>
+  `).join('');
+  cont.innerHTML = `
+    <table>
+      <thead>
+        <tr>
+          <th>Associado</th><th>Cliente</th><th>Telefone</th><th>Status</th><th>Vencimento atual</th>
+        </tr>
+      </thead>
+      <tbody>${rowsHtml}</tbody>
+    </table>
+  `;
+}
+
+function exportarAssociadosCSV(){
+  const linhas = coletarAssociadosLista();
+  if(!linhas.length){
+    alert("Nenhum associado para exportar.");
+    return;
+  }
+  const header = ["Associado","Cliente","Telefone","Status","Vencimento atual"];
+  const csvRows = [header.join(";")].concat(
+    linhas.map(l => [l.associado,l.cliente,l.telefone,l.status,l.vencimento_atual].join(";"))
+  );
+  const blob = new Blob([csvRows.join("\\n")], {type:"text/csv;charset=utf-8;"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "associados.csv";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+
+// --------- SUBMIT DO FORM ---------
+
+document.getElementById('form').addEventListener('submit', async (e)=>{
+  e.preventDefault();
+  const f = e.target;
+  const associados = f.associados.value
+    .split(',')
+    .map(s => s.trim())
+    .filter(s => s.length);
 
   const payload = {
-    nome: qs("nome").value.trim(),
-    valor_credito: parseFloat(qs("valor_credito").value || 0),
-    data_credito: qs("data_credito").value,
-    data_vencimento: qs("data_vencimento").value,
-    juros_mensal: parseFloat(qs("juros_mensal").value || 0),
-    juros_diario_valor: parseFloat(qs("juros_diario").value || 0),
-    objeto_empenho: qs("objeto_empenho").value.trim(),
-    documento: qs("documento").value.trim(),
-    associados: associadosArray.slice(), // envia lista
-    telefone: qs("telefone").value.trim(),
+    nome: f.nome.value.trim(),
+    telefone: f.telefone.value.trim(),
+    valor_credito: f.valor_credito.value,
+    data_credito: f.data_credito.value || null,
+    data_vencimento: f.data_vencimento.value || null,
+    juros_mensal: f.juros_mensal.value,
+    juros_diario_valor: f.juros_diario.value,
+    objeto: f.objeto.value.trim() || null,
+    associados: associados
   };
 
-  if (editIndex !== null) {
-    const res = await fetch(`${API_BASE}/clientes`);
-    const atual = await res.json();
-    payload.status = atual[editIndex]?.status || "ativo";
-    payload.ultimo_envio = atual[editIndex]?.ultimo_envio || null;
+  const idx = f.dataset.index;
+  let url = API_BASE + '/cadastrar';
+  if(idx !== undefined && idx !== ""){
+    url = API_BASE + '/editar/' + idx;
   }
 
-  const url = editIndex !== null ? `${API_BASE}/editar/${editIndex}` : `${API_BASE}/cadastrar`;
-  const r = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-
-  if (!r.ok) { alert("Erro ao salvar: " + (await r.text())); return; }
-
-  alert(editIndex !== null ? "Cliente atualizado!" : "Cliente cadastrado!");
-  document.getElementById("cliente-form").reset();
-  associadosArray = []; refreshAssociadosChips();
-  editIndex = null;
-  await carregarClientes();
-}
-
-async function editarCliente(i) {
-  const res = await fetch(`${API_BASE}/clientes`);
-  const clientes = await res.json();
-  const c = clientes[i];
-  editIndex = i;
-
-  qs("nome").value = c.nome || "";
-  qs("valor_credito").value = c.valor_credito || "";
-  qs("data_credito").value = c.data_credito || "";
-  qs("data_vencimento").value = c.data_vencimento || "";
-  qs("juros_mensal").value = c.juros_mensal || "";
-  qs("juros_diario").value = c.juros_diario_valor_dia || c.juros_diario_valor || "";
-  qs("objeto_empenho").value = c.objeto_empenho || "";
-  qs("documento").value = c.documento || "";
-  qs("telefone").value = c.telefone || "";
-
-  associadosArray = Array.isArray(c.associados)
-    ? c.associados.slice()
-    : (typeof c.associados === "string" && c.associados ? c.associados.split(",").map(s=>s.trim()) : []);
-  refreshAssociadosChips();
-
-  window.scrollTo({ top: 0, behavior: "smooth" });
-}
-
-async function excluirCliente(i) {
-  if (!confirm("Excluir este cliente?")) return;
-  await fetch(`${API_BASE}/cliente/${i}`, { method: "DELETE" });
-  carregarClientes();
-}
-
-async function quitar(i) {
-  if (!confirm("Marcar este cliente como quitado?")) return;
-  await fetch(`${API_BASE}/quitar/${i}`, { method: "POST" });
-  carregarClientes();
-}
-
-async function reativar(i) {
-  if (!confirm("Reativar este cliente?")) return;
-  await fetch(`${API_BASE}/reativar/${i}`, { method: "POST" });
-  carregarClientes();
-}
-
-// ---------- WhatsApp (sem associados na mensagem) ----------
-async function enviarWhatsapp(i) {
-  await fetch(`${API_BASE}/registrar_envio/${i}`, { method: "POST" });
-  await carregarClientes();
-  const c = cache[i];
-  if (!c || !c.telefone) return alert("Telefone não cadastrado!");
-
-  const saldo_total = (c.juros_mensal_valor || 0) + (c.juros_diario_total || 0);
-
-  const mensagem = `Olá ${c.nome}! 💰
-
-Seu saldo atualizado de hoje é de R$ ${saldo_total.toFixed(2)}.
-Data de vencimento: ${c.data_vencimento}
-Juros mensal: R$ ${c.juros_mensal_valor.toFixed(2)}
-Juros diário: R$ ${c.juros_diario_total.toFixed(2)} (R$ ${c.juros_diario_valor_dia.toFixed(2)} por dia útil)
-
-Efetue o pagamento via PIX:
-Chave: ${PIX_KEY}
-
-Atenciosamente,
-LW Mútuo Mercantil`;
-
-  window.open(`https://wa.me/${c.telefone}?text=${encodeURIComponent(mensagem)}`, "_blank");
-}
-
-// ---------- Exportar ----------
-function exportarJSON() {
-  const blob = new Blob([JSON.stringify(cache, null, 2)], { type: "application/json" });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = "clientes.json";
-  a.click();
-  URL.revokeObjectURL(a.href);
-}
-
-function exportarCSV() {
-  if (!cache.length) { alert("Sem dados para exportar."); return; }
-  // Cabeçalhos com TODOS os campos
-  const headers = [
-    "nome","telefone","valor_credito","data_credito","data_vencimento",
-    "juros_mensal","juros_mensal_valor","juros_diario_valor_dia","dias_uteis_atraso",
-    "juros_diario_total","valor_total","objeto_empenho","documento","associados","status","ultimo_envio"
-  ];
-  const rows = cache.map(c => [
-    c.nome || "", c.telefone || "", c.valor_credito || 0, c.data_credito || "", c.data_vencimento || "",
-    c.juros_mensal || 0, c.juros_mensal_valor || 0, c.juros_diario_valor_dia || c.juros_diario_valor || 0, c.dias_uteis_atraso || 0,
-    c.juros_diario_total || 0, c.valor_total || 0, c.objeto_empenho || "", c.documento || "",
-    Array.isArray(c.associados) ? c.associados.join("; ") : (c.associados || ""),
-    c.status || "ativo", c.ultimo_envio || ""
-  ]);
-
-  const csv = [headers.join(","), ...rows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(","))].join("\n");
-  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = "clientes.csv";
-  a.click();
-  URL.revokeObjectURL(a.href);
-}
-
-async function duplicar(i) {
-  if (!confirm("Duplicar este cadastro como nova operação?")) return;
-  const res = await fetch(`${API_BASE}/clientes`);
-  const clientes = await res.json();
-  const c = clientes[i];
-
-  const payload = {
-    ...c,
-    data_credito: new Date().toISOString().slice(0,10),
-    status: "ativo",
-    ultimo_envio: null
-  };
-  // limpa campos que o backend recalcula
-  delete payload.valor_total;
-  delete payload.juros_mensal_valor;
-  delete payload.juros_diario_valor_dia;
-  delete payload.juros_diario_total;
-  delete payload.dias_uteis_atraso;
-  delete payload.vencimentos;
-  delete payload.vencimento_atual;
-
-  await fetch(`${API_BASE}/cadastrar`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
+  const r = await fetch(url,{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
     body: JSON.stringify(payload)
   });
-  alert("Cadastro duplicado como nova operação.");
-  carregarClientes();
-}
+  if(!r.ok){
+    const txt = await r.text();
+    alert('Erro ao salvar: ' + txt);
+    return;
+  }
+  f.reset();
+  delete f.dataset.index;
+  load();
+});
 
-function gerarRecibo(i) {
-  alert("Recibo PDF será gerado (jsPDF) na próxima etapa — envio manual.");
-}
-
-// ---------- Eventos ----------
-document.getElementById("cliente-form").addEventListener("submit", salvarCliente);
-document.getElementById("busca").addEventListener("input", renderCobrancas);
-const ba = document.getElementById("busca-admin"); if (ba) ba.addEventListener("input", renderAdmin);
-carregarClientes();
+// Inicializa a tela
+load();
+</script>
