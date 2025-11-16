@@ -5,16 +5,32 @@
 <header><h1>💼 LW Mútuo Mercantil — Sistema de Cobranças Automáticas</h1><p class='subtitle'>v3.3 — ciclos, feriados BR+DF e WhatsApp</p></header>
 <main class='card'><h2>Cadastrar / Editar</h2>
 <form id='form' class='grid'>
-<input id='nome' placeholder='Nome' required>
-<input id='telefone' placeholder='Telefone (5561XXXXXXXX)' required>
-<input id='valor_credito' type='number' step='0.01' placeholder='Valor de Crédito (R$)' required>
-<input id='data_credito' type='date'>
-<input id='data_vencimento' type='date'>
-<input id='juros_mensal' type='number' step='0.01' placeholder='Juros Mensal (%)' required>
-<input id='juros_diario' type='number' step='0.01' placeholder='Juros Diário (R$/dia útil)' required>
-<button class='btn' style='grid-column:span 2'>💾 Salvar</button>
-</form></main>
-<section class='card'><h2>Clientes</h2><div id='lista'></div></section>
+  <input id='nome' placeholder='Nome' required>
+  <input id='telefone' placeholder='Telefone (5561XXXXXXXX)' required>
+
+  <input id='objeto' placeholder='Objeto em garantia (ex: relógio, celular)'>
+
+  <input id='valor_credito' type='number' step='0.01' placeholder='Valor de Crédito (R$)' required>
+  <input id='data_credito' type='date'>
+  <input id='data_vencimento' type='date'>
+
+  <input id='juros_mensal' type='number' step='0.01' placeholder='Juros Mensal (%)' required>
+  <input id='juros_diario' type='number' step='0.01' placeholder='Juros Diário (R$/dia útil)' required>
+
+  <input id='associados' placeholder='Associados (separe por vírgula)'>
+
+  <button class='btn' style='grid-column:span 2'>💾 Salvar</button>
+</form>
+</main>
+<section class='card'>
+  <h2>Associados</h2>
+  <p>Lista de associados vinculados aos clientes cadastrados.</p>
+  <div id='associados'></div>
+  <button class='btn' style='margin-top:0.5rem' onclick='exportarAssociadosCSV()'>
+    📤 Exportar Associados (.csv)
+  </button>
+</section>
+
 <footer><p>© 2025 LW Mútuo Mercantil</p></footer>
 <script>
 const API_BASE = "https://autocobrancas.onrender.com";
