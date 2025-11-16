@@ -10,6 +10,16 @@ DATA_FILE = "data/clientes.json"
 FERIADOS_FIXOS = {(1,1),(4,21),(5,1),(9,7),(10,12),(11,2),(11,15),(12,25)}
 FERIADOS_DF_FIXOS = {(4,21),(11,30)}
 
+PIX_KEY = "dcb448d4-2b4b-4f25-9097-95d800d3638a"  # mesma chave já usada no front
+CNPJ_PIX = "59014280000130"  # nova chave CNPJ
+
+def format_date_br(d: date) -> str:
+    return d.strftime("%d/%m/%Y")
+
+def format_money_br(v: float) -> str:
+    # Formata em "R$ 1.234,56"
+    return f"R$ {v:,.2f}".replace(",", "v").replace(".", ",").replace("v", ".")
+
 def calcular_feriados_moveis(ano):
     a = ano % 19; b = ano // 100; c = ano % 100; d = b // 4; e = b % 4
     f = (b + 8) // 25; g = (b - f + 1) // 3
@@ -128,6 +138,78 @@ def calcular_ciclos(cli: dict):
 
 def aplicar_calculo(cli: dict):
     cli.update(calcular_ciclos(cli)); return cli
+
+@app.get("/cobrancas/hoje")
+def cobrancas_hoje():
+    # Carrega e recalcula todos os clientes
+    lst = load_clientes()
+    for c in lst:
+        aplicar_calculo(c)
+    save_clientes(lst)
+
+    hoje_iso = datetime.now().date().strftime("%Y-%m-%d")
+    cobrancas = []
+
+    for i, cli in enumerate(lst):
+        # Só quem vence HOJE
+        if cli.get("vencimento_atual") != hoje_iso:
+            continue
+
+        status = (cli.get("status") or "ativo").lower()
+        # Não envia para quitado
+        if status == "quitado":
+            continue
+
+        ciclos = cli.get("ciclos") or []
+        ciclo_atual = next(
+            (ci for ci in ciclos if ci.get("vencimento") == cli.get("vencimento_atual")),
+            None
+        )
+        if not ciclo_atual and ciclos:
+            ciclo_atual = ciclos[-1]
+
+        valor = float(
+            ciclo_atual.get("valor_atualizado")
+            if ciclo_atual else cli.get("valor_credito", 0.0)
+        )
+
+        # Data em dd/mm/aaaa
+        dt_venc = datetime.strptime(cli["vencimento_atual"], "%Y-%m-%d").date()
+        data_venc_br = format_date_br(dt_venc)
+
+        objeto = cli.get("objeto") or ""
+
+        # MONTA A MENSAGEM (sem valor de crédito, só valor atualizado)
+        msg_partes = []
+        msg_partes.append(f"Olá {cli.get('nome','')}, tudo bem?\n\n")
+        msg_partes.append("Aqui é da LW Mútuo Mercantil.\n\n")
+        texto_contrato = f"Estamos lembrando que hoje, dia {data_venc_br}, vence o pagamento referente ao seu contrato."
+        if objeto:
+            texto_contrato += f" Objeto em garantia: {objeto}."
+        msg_partes.append(texto_contrato + "\n\n")
+        msg_partes.append(
+            f"Valor para pagamento hoje (com juros do mês e juros diário conforme combinado): {format_money_br(valor)}.\n\n"
+        )
+        msg_partes.append("Chaves PIX para pagamento:\n")
+        msg_partes.append(f"• Chave padrão: {PIX_KEY}\n")
+        msg_partes.append(f"• CNPJ: {CNPJ_PIX}\n\n")
+        msg_partes.append(
+            "Após o pagamento, por favor envie o comprovante neste número para atualização do sistema.\n\n"
+        )
+        msg_partes.append("Qualquer dúvida, estamos à disposição.")
+        mensagem = "".join(msg_partes)
+
+        cobrancas.append({
+            "indice": i,  # índice do cliente no arquivo
+            "nome": cli.get("nome"),
+            "telefone": cli.get("telefone"),
+            "data_vencimento": data_venc_br,
+            "valor_com_juros": valor,
+            "mensagem_whatsapp": mensagem,
+            "status": status,
+        })
+
+    return cobrancas
 
 @app.get("/clientes")
 def listar_clientes():
