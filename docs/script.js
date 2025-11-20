@@ -1,4 +1,3 @@
-<script>
 const API_BASE = "https://autocobrancas.onrender.com";
 const PIX_KEY = "dcb448d4-2b4b-4f25-9097-95d800d3638a";
 const CNPJ_PIX = "59014280000130";
@@ -58,12 +57,13 @@ function card(c,i){
     <div class='cli'>
       <h3>${c.nome} <small>(${c.status})</small></h3>
       <p><b>Telefone:</b> ${c.telefone}</p>
-      <p><b>Valor Crédito:</b> ${money(c.valor_credito)}</p>
-      <p><b>Vencimento atual:</b> ${formatDateBr(c.vencimento_atual || c.data_vencimento)}</p>
       ${c.objeto ? `<p><b>Objeto em garantia:</b> ${c.objeto}</p>` : ""}
       ${c.associados && c.associados.length ? `<p><b>Associados:</b> ${c.associados.join(", ")}</p>` : ""}
+      <p><b>Vencimento atual:</b> ${formatDateBr(c.vencimento_atual || c.data_vencimento)}</p>
       ${atual ? `<p><b>Valor para pagamento (hoje):</b> ${money(atual.valor_atualizado)}</p>` : ""}
+      
       <details><summary>Detalhes dos ciclos</summary><ul>${linhas}</ul></details>
+
       <div class='acoes'>
         <button class='btn' onclick='editar(${i})'>✏️ Editar</button>
         <button class='btn' onclick='zap(${i})' ${podeEnviarHoje ? "" : "disabled title='Só libera no dia do vencimento atual'"}>💬 WhatsApp</button>
@@ -73,7 +73,7 @@ function card(c,i){
 }
 
 // Monta mensagem de WhatsApp (sem valor de crédito, com CNPJ)
-async function zap(i){
+function zap(i){
   const c = CLIENTES_CACHE[i];
   if(!c) return;
 
@@ -81,22 +81,24 @@ async function zap(i){
   const valorHoje = atual ? atual.valor_atualizado : c.valor_credito;
   const dataVenc = formatDateBr(c.vencimento_atual || (atual && atual.vencimento) || c.data_vencimento);
 
-  let msg = `Olá ${c.nome}, tudo bem?\\n\\n`;
-  msg += `Aqui é da LW Mútuo Mercantil.\\n\\n`;
+  let msg = `Olá ${c.nome}, tudo bem?\n\n`;
+  msg += `Aqui é da LW Mútuo Mercantil.\n\n`;
   msg += `Estamos lembrando que hoje, dia ${dataVenc}, vence o pagamento referente ao seu contrato.`;
   if (c.objeto) {
     msg += ` Objeto em garantia: ${c.objeto}.`;
   }
-  msg += `\\n\\n`;
-  msg += `Valor para pagamento hoje (com juros do mês e juros diário conforme combinado): ${money(valorHoje)}.\\n\\n`;
-  msg += `Chaves PIX para pagamento:\\n`;
-  msg += `• Chave padrão: ${PIX_KEY}\\n`;
-  msg += `• CNPJ: ${CNPJ_PIX}\\n\\n`;
-  msg += `Após o pagamento, por favor envie o comprovante neste número para atualização do sistema.\\n\\n`;
+  msg += `\n\n`;
+  msg += `Valor para pagamento hoje (com juros do mês e juros diário conforme combinado): ${money(valorHoje)}.\n\n`;
+  msg += `Chaves PIX para pagamento:\n`;
+  msg += `• Chave padrão: ${PIX_KEY}\n`;
+  msg += `• CNPJ: ${CNPJ_PIX}\n\n`;
+  msg += `Após o pagamento, por favor envie o comprovante neste número para atualização do sistema.\n\n`;
   msg += `Qualquer dúvida, estamos à disposição.`;
 
-  const url = `https://wa.me/${c.telefone}?text=${encodeURIComponent(msg)}`;
-  window.open(url, '_blank');
+  const telefone = c.telefone.replace(/\D/g, "");
+  const url = `https://wa.me/${telefone}?text=${encodeURIComponent(msg)}`;
+
+  window.open(url, "_blank");
 }
 
 // Preenche formulário para edição
@@ -105,6 +107,7 @@ function editar(i){
   if(!c) return;
   const f = document.getElementById('form');
   f.dataset.index = i;
+
   f.nome.value = c.nome || "";
   f.telefone.value = c.telefone || "";
   f.valor_credito.value = c.valor_credito || "";
@@ -114,7 +117,6 @@ function editar(i){
   f.juros_diario.value = c.juros_diario_valor || c.juros_diario || "";
   f.objeto.value = c.objeto || "";
   f.associados.value = (c.associados || []).join(", ");
-  f.nome.focus();
 }
 
 // --------- GUIA DE ASSOCIADOS ---------
@@ -138,11 +140,13 @@ function coletarAssociadosLista(){
 function renderAssociados(){
   const cont = document.getElementById('associados');
   if(!cont) return;
+
   const linhas = coletarAssociadosLista();
   if(!linhas.length){
     cont.innerHTML = "<p>Nenhum associado cadastrado.</p>";
     return;
   }
+
   const rowsHtml = linhas.map(l => `
     <tr>
       <td>${l.associado}</td>
@@ -152,11 +156,16 @@ function renderAssociados(){
       <td>${l.vencimento_atual}</td>
     </tr>
   `).join('');
+
   cont.innerHTML = `
     <table>
       <thead>
         <tr>
-          <th>Associado</th><th>Cliente</th><th>Telefone</th><th>Status</th><th>Vencimento atual</th>
+          <th>Associado</th>
+          <th>Cliente</th>
+          <th>Telefone</th>
+          <th>Status</th>
+          <th>Vencimento atual</th>
         </tr>
       </thead>
       <tbody>${rowsHtml}</tbody>
@@ -174,7 +183,8 @@ function exportarAssociadosCSV(){
   const csvRows = [header.join(";")].concat(
     linhas.map(l => [l.associado,l.cliente,l.telefone,l.status,l.vencimento_atual].join(";"))
   );
-  const blob = new Blob([csvRows.join("\\n")], {type:"text/csv;charset=utf-8;"});
+
+  const blob = new Blob([csvRows.join("\n")], {type:"text/csv;charset=utf-8;"});
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
@@ -189,6 +199,7 @@ function exportarAssociadosCSV(){
 document.getElementById('form').addEventListener('submit', async (e)=>{
   e.preventDefault();
   const f = e.target;
+
   const associados = f.associados.value
     .split(',')
     .map(s => s.trim())
@@ -217,16 +228,17 @@ document.getElementById('form').addEventListener('submit', async (e)=>{
     headers:{'Content-Type':'application/json'},
     body: JSON.stringify(payload)
   });
+
   if(!r.ok){
     const txt = await r.text();
     alert('Erro ao salvar: ' + txt);
     return;
   }
+
   f.reset();
   delete f.dataset.index;
   load();
 });
 
-// Inicializa a tela
+// Inicializa tudo
 load();
-</script>
