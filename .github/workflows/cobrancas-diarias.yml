@@ -1,0 +1,45 @@
+
+name: Cobranças diárias
+
+on:
+  schedule:
+    - cron: "0 11 * * *"
+  workflow_dispatch:
+
+jobs:
+  verificar_cobrancas_hoje:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Mostrar data atual
+        run: date
+
+      - name: Verificar cobrancas de hoje
+        run: |
+          python - << 'PY'
+          import requests
+
+          url = "https://autocobrancas.onrender.com/cobrancas/hoje"
+          print(f"Consultando {url} ...")
+
+          try:
+            resp = requests.get(url, timeout=15)
+            resp.raise_for_status()
+          except Exception as e:
+            print("ERRO ao consultar API:", e)
+            raise SystemExit(1)
+
+          cobrancas = resp.json()
+          if not cobrancas:
+            print("Nenhuma cobrança para hoje.")
+            raise SystemExit(0)
+
+          print(f"{len(cobrancas)} cobrança(s) encontrada(s):")
+          for c in cobrancas:
+            print("-"*60)
+            print("Cliente:", c.get("nome"))
+            print("Telefone:", c.get("telefone"))
+            print("Status:", c.get("status"))
+            print("Data vencimento:", c.get("data_vencimento"))
+            print("Valor com juros:", c.get("valor_com_juros"))
+          PY
