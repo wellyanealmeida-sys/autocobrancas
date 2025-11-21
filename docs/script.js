@@ -1,4 +1,5 @@
-const API_BASE = "https://autocobrancas.onrender.com";
+
+const API_BASE = "";
 const PIX_KEY = "dcb448d4-2b4b-4f25-9097-95d800d3638a";
 const CNPJ_PIX = "59014280000130";
 
@@ -36,7 +37,9 @@ async function load(){
   CLIENTES_CACHE = arr;
   document.getElementById('lista').innerHTML =
     arr.map((c,i)=>card(c,i)).join('') || '<p>Nenhum cliente.</p>';
+
   renderAssociados();
+  loadCobrancasHoje();
 }
 
 // Monta o card de cada cliente
@@ -55,13 +58,13 @@ function card(c,i){
 
   return `
     <div class='cli'>
-      <h3>${c.nome} <small>(${c.status})</small></h3>
+      <h3>${c.nome} <small>(${c.status || "ativo"})</small></h3>
       <p><b>Telefone:</b> ${c.telefone}</p>
       ${c.objeto ? `<p><b>Objeto em garantia:</b> ${c.objeto}</p>` : ""}
       ${c.associados && c.associados.length ? `<p><b>Associados:</b> ${c.associados.join(", ")}</p>` : ""}
       <p><b>Vencimento atual:</b> ${formatDateBr(c.vencimento_atual || c.data_vencimento)}</p>
       ${atual ? `<p><b>Valor para pagamento (hoje):</b> ${money(atual.valor_atualizado)}</p>` : ""}
-      
+
       <details><summary>Detalhes dos ciclos</summary><ul>${linhas}</ul></details>
 
       <div class='acoes'>
@@ -117,6 +120,72 @@ function editar(i){
   f.juros_diario.value = c.juros_diario_valor || c.juros_diario || "";
   f.objeto.value = c.objeto || "";
   f.associados.value = (c.associados || []).join(", ");
+}
+
+// --------- COBRANÇAS DE HOJE (via /cobrancas/hoje) ---------
+
+async function loadCobrancasHoje(){
+  const cont = document.getElementById('cobrancas-hoje');
+  if(!cont) return;
+
+  cont.innerHTML = "<p>Carregando...</p>";
+
+  try{
+    const r = await fetch(API_BASE + '/cobrancas/hoje');
+    if(!r.ok){
+      cont.innerHTML = "<p>Erro ao carregar cobranças de hoje.</p>";
+      return;
+    }
+    const cobrancas = await r.json();
+    if(!cobrancas.length){
+      cont.innerHTML = "<p>Nenhuma cobrança para hoje.</p>";
+      return;
+    }
+
+    cont.innerHTML = cobrancas.map((c,idx) => `
+      <div class="cli">
+        <h3>${c.nome} <small>(${c.status})</small></h3>
+        <p><b>Telefone:</b> ${c.telefone}</p>
+        <p><b>Vencimento:</b> ${c.data_vencimento}</p>
+        <p><b>Valor para pagamento hoje:</b> ${money(c.valor_com_juros)}</p>
+        <button class="btn" onclick="abrirWhatsappCobranca(${idx})">💬 WhatsApp</button>
+      </div>
+    `).join('');
+
+    window.COBRANCAS_HOJE_CACHE = cobrancas;
+  }catch(e){
+    console.error(e);
+    cont.innerHTML = "<p>Erro ao carregar cobranças de hoje.</p>";
+  }
+}
+
+function abrirWhatsappCobranca(idx){
+  const lista = window.COBRANCAS_HOJE_CACHE || [];
+  const c = lista[idx];
+  if(!c) return;
+
+  const telefone = (c.telefone || "").replace(/\D/g, "");
+  const url = `https://wa.me/${telefone}?text=${encodeURIComponent(c.mensagem_whatsapp)}`;
+  window.open(url, "_blank");
+}
+
+// Botão "Cobrar todos agora"
+async function cobrarTodosAgora(){
+  const lista = window.COBRANCAS_HOJE_CACHE;
+  if(!lista || !lista.length){
+    alert("Nenhuma cobrança para hoje.");
+    return;
+  }
+
+  if(!confirm(`Isso vai abrir o WhatsApp para ${lista.length} cliente(s). Deseja continuar?`)){
+    return;
+  }
+
+  lista.forEach(c => {
+    const telefone = (c.telefone || "").replace(/\D/g, "");
+    const url = `https://wa.me/${telefone}?text=${encodeURIComponent(c.mensagem_whatsapp)}`;
+    window.open(url, "_blank");
+  });
 }
 
 // --------- GUIA DE ASSOCIADOS ---------
@@ -189,6 +258,125 @@ function exportarAssociadosCSV(){
   const a = document.createElement("a");
   a.href = url;
   a.download = "associados.csv";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+
+// --------- RELATÓRIOS / EXPORTAÇÕES ---------
+
+function exportarCarteiraCSV(){
+  if(!CLIENTES_CACHE.length){
+    alert("Nenhum cliente para exportar.");
+    return;
+  }
+
+  const header = [
+    "Nome",
+    "Telefone",
+    "Status",
+    "Objeto",
+    "Valor_Credito",
+    "Data_Credito",
+    "Vencimento_Atual",
+    "Associados"
+  ];
+
+  const linhas = CLIENTES_CACHE.map(c => [
+    c.nome || "",
+    c.telefone || "",
+    c.status || "",
+    c.objeto || "",
+    String(c.valor_credito || "").replace(".", ","),
+    (c.data_credito || "").slice(0,10),
+    (c.vencimento_atual || c.data_vencimento || "").slice(0,10),
+    (c.associados || []).join(" | ")
+  ]);
+
+  const csvRows = [header.join(";")].concat(linhas.map(l => l.join(";")));
+  const blob = new Blob([csvRows.join("\n")], {type:"text/csv;charset=utf-8;"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "carteira_completa.csv";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+
+function exportarRelatorioMensalCSV(){
+  if(!CLIENTES_CACHE.length){
+    alert("Nenhum cliente na carteira.");
+    return;
+  }
+
+  const inputMes = document.getElementById("mes-relatorio");
+  if(!inputMes || !inputMes.value){
+    alert("Selecione um mês para o relatório.");
+    return;
+  }
+
+  const [ano, mes] = inputMes.value.split("-");
+  const alvoPrefix = `${ano}-${mes}`;
+
+  const linhas = [];
+  CLIENTES_CACHE.forEach(c => {
+    const ciclos = c.ciclos || [];
+    ciclos.forEach(ci => {
+      if((ci.vencimento || "").startsWith(alvoPrefix)){
+        linhas.push({
+          nome: c.nome || "",
+          telefone: c.telefone || "",
+          status: c.status || "",
+          objeto: c.objeto || "",
+          vencimento: ci.vencimento,
+          valor_atualizado: ci.valor_atualizado,
+          juros_mensal_valor: ci.juros_mensal_valor,
+          juros_diario_total: ci.juros_diario_total,
+          dias_uteis: ci.dias_uteis,
+          associados: (c.associados || []).join(" | ")
+        });
+      }
+    });
+  });
+
+  if(!linhas.length){
+    alert("Nenhum ciclo de vencimento encontrado para esse mês.");
+    return;
+  }
+
+  const header = [
+    "Nome",
+    "Telefone",
+    "Status",
+    "Objeto",
+    "Data_Vencimento",
+    "Valor_Atualizado",
+    "Juros_Mensal_Valor",
+    "Juros_Diario_Total",
+    "Dias_Uteis",
+    "Associados"
+  ];
+
+  const csvLinhas = linhas.map(l => [
+    l.nome,
+    l.telefone,
+    l.status,
+    l.objeto,
+    l.vencimento,
+    String(l.valor_atualizado || "").replace(".", ","),
+    String(l.juros_mensal_valor || "").replace(".", ","),
+    String(l.juros_diario_total || "").replace(".", ","),
+    l.dias_uteis,
+    l.associados
+  ]);
+
+  const csvRows = [header.join(";")].concat(csvLinhas.map(l => l.join(";")));
+  const blob = new Blob([csvRows.join("\n")], {type:"text/csv;charset=utf-8;"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `relatorio_mensal_${ano}_${mes}.csv`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
