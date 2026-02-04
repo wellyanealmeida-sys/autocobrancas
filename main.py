@@ -1,19 +1,18 @@
-
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import sqlite3
-from datetime import date
 
 app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-DB = "database.db"
+DB = "/data/database.db"
 
 def get_db():
     return sqlite3.connect(DB)
@@ -26,6 +25,7 @@ def init_db():
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         nome TEXT,
         telefone TEXT,
+        tipo_telefone TEXT,
         valor REAL,
         data_credito TEXT,
         primeiro_vencimento TEXT,
@@ -44,13 +44,21 @@ def cadastrar(d: dict):
     conn = get_db()
     c = conn.cursor()
     c.execute(
-        """INSERT INTO clientes
-        (nome, telefone, valor, data_credito, primeiro_vencimento, dias, juros, associados)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+        """
+        INSERT INTO clientes
+        (nome, telefone, tipo_telefone, valor, data_credito, primeiro_vencimento, dias, juros, associados)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
         (
-            d["nome"], d["telefone"], d["valor"],
-            d["data_credito"], d["primeiro_vencimento"],
-            d["dias"], d["juros"], d["associados"]
+            d["nome"],
+            d["telefone"],
+            d["tipo_telefone"],
+            d["valor"],
+            d["data_credito"],
+            d["primeiro_vencimento"],
+            d["dias"],
+            d["juros"],
+            d["associados"]
         )
     )
     conn.commit()
@@ -63,5 +71,9 @@ def listar():
     c = conn.cursor()
     rows = c.execute("SELECT * FROM clientes").fetchall()
     conn.close()
-    keys = ["id","nome","telefone","valor","data_credito","primeiro_vencimento","dias","juros","associados"]
+    keys = [
+        "id","nome","telefone","tipo_telefone",
+        "valor","data_credito","primeiro_vencimento",
+        "dias","juros","associados"
+    ]
     return [dict(zip(keys, r)) for r in rows]
