@@ -1,4 +1,3 @@
-
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -65,7 +64,6 @@ def contar_dias_uteis(inicio: date, fim: date) -> int:
     return dias
 
 def aplicar_calculo(cli: dict):
-    # Gera até 3 ciclos de vencimento (exemplo)
     ciclos = []
     valor_base = float(cli.get("valor_credito", 0) or 0)
     juros_mensal = float(cli.get("juros_mensal", 0) or 0)
