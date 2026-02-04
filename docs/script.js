@@ -31,15 +31,31 @@ function cicloAtual(cli){
 }
 
 // Carrega clientes da API e atualiza tela
-async function load(){
-  const r = await fetch(API_BASE + '/clientes');
-  const arr = await r.json();
-  CLIENTES_CACHE = arr;
-  document.getElementById('lista').innerHTML =
-    arr.map((c,i)=>card(c,i)).join('') || '<p>Nenhum cliente.</p>';
+async function salvarCliente() {
+  const data = {
+    nome: document.getElementById("nome").value,
+    telefone: document.getElementById("telefone").value,
+    tipo_telefone: document.getElementById("tipoTelefone").value,
+    valor: parseFloat(document.getElementById("valor").value),
+    data_credito: document.getElementById("dataCredito").value,
+    primeiro_vencimento: document.getElementById("primeiroVencimento").value,
+    dias: parseInt(document.getElementById("dias").value),
+    juros: parseFloat(document.getElementById("juros").value),
+    associados: document.getElementById("associados").value
+  };
 
-  renderAssociados();
-  loadCobrancasHoje();
+  const resp = await fetch(`${API_BASE}/cadastrar`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data)
+  });
+
+  if (!resp.ok) {
+    alert("Erro ao salvar");
+    return;
+  }
+
+  alert("Cadastro salvo com sucesso!");
 }
 
 // Monta o card de cada cliente
