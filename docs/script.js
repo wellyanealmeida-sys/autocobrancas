@@ -1,5 +1,5 @@
 
-const API_BASE = "";
+const API_BASE = "https://autocobrancas.onrender.com";
 const PIX_KEY = "dcb448d4-2b4b-4f25-9097-95d800d3638a";
 const CNPJ_PIX = "59014280000130";
 
@@ -25,7 +25,7 @@ function hojeISO(){
 // Pega o ciclo atual (do vencimento_atual) ou o último
 function cicloAtual(cli){
   const ciclos = cli.ciclos || [];
-  if(!ciclos.length) return null;
+  if(!cicculos.length) return null;
   const atual = ciclos.find(ci => ci.vencimento === cli.vencimento_atual);
   return atual || ciclos[ciclos.length-1];
 }
